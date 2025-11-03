@@ -1,14 +1,19 @@
 import { Injectable } from '@nestjs/common';
 import * as nodemailer from 'nodemailer';
 
-import { config } from 'dotenv';
-config();
 @Injectable()
 export class MailService {
   private transporter;
 
   constructor() {
-    // Gmail configuration
+    this.transporter = nodemailer.createTransport({
+      host: "sandbox.smtp.mailtrap.io",
+      port: 2525,
+      auth: {
+        user: '3a7acff4faabaa',  // ← This is correct
+        pass: '4fbf4854b9a4b0',  // ← Change this!
+      },
+    });
     // this.transporter = nodemailer.createTransport({
     //   service: 'gmail',
     //   auth: {
@@ -16,21 +21,11 @@ export class MailService {
     //     pass: process.env.EMAIL_PASSWORD || 'your-app-password',
     //   },
     // });
-
-   
-    this.transporter = nodemailer.createTransport({
-  host: "sandbox.smtp.mailtrap.io",
-      port: 2525,
-      auth: {
-        user: '3a7acff4faabaa',
-        pass: process.env.SENDGRID_API_KEY,
-      },
-    });
   }
 
   async sendResetPasswordEmail(email: string, resetCode: string) {
     const mailOptions = {
-      from: process.env.EMAIL_USER || 'your-email@gmail.com',
+      from: 'jridiemna04@gmail.com',  // ← Change this
       to: email,
       subject: 'Password Reset Code',
       html: `
@@ -47,8 +42,8 @@ export class MailService {
     };
 
     try {
-      await this.transporter.sendMail(mailOptions);
-      console.log("aaaaaaaa")
+      const result = await this.transporter.sendMail(mailOptions);
+      console.log("Email sent successfully:", result.messageId);
       return true;
     } catch (error) {
       console.error('Error sending email:', error);
@@ -58,7 +53,7 @@ export class MailService {
 
   async sendWelcomeEmail(email: string, name: string) {
     const mailOptions = {
-      from: process.env.EMAIL_USER || 'your-email@gmail.com',
+      from: 'noreply@yourapp.com',
       to: email,
       subject: 'Welcome to Our App!',
       html: `
@@ -71,7 +66,8 @@ export class MailService {
     };
 
     try {
-      await this.transporter.sendMail(mailOptions);
+      const result = await this.transporter.sendMail(mailOptions);
+      console.log("Welcome email sent:", result);
       return true;
     } catch (error) {
       console.error('Error sending email:', error);
