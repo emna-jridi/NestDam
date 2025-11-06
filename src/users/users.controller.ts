@@ -11,11 +11,11 @@ import { Roles } from '../auth/roles.decorator';
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
-  @Post('register')
-  @ApiOperation({ summary: 'Register new user (Mobile App)' })
-  register(@Body() createUserDto: CreateUserDto) {
-    return this.usersService.create(createUserDto, 'user');
-  }
+  // @Post('register')
+  // @ApiOperation({ summary: 'Register new user ' })
+  // register(@Body() createUserDto: CreateUserDto) {
+  //   return this.usersService.create(createUserDto, 'user');
+  // }
 
   @Get()
   @UseGuards(JwtAuthGuard, RolesGuard)

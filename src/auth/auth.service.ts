@@ -4,6 +4,7 @@ import { UsersService } from '../users/users.service';
 import { LoginDto } from './dto/login.dto';
 import * as bcrypt from 'bcrypt';
 import { MailService } from 'src/mail/mail.service';
+import { CreateUserDto } from 'src/users/dto/create-user.dto';
 
 @Injectable()
 export class AuthService {
@@ -13,6 +14,24 @@ export class AuthService {
       private mailService: MailService,
 
   ) {}
+
+  async register(createUserDto: CreateUserDto) {
+  //  Create the new user
+  const user = await this.usersService.create(createUserDto);
+  // user info
+  return {
+  
+    user: {
+      id: user._id,
+      name: user.name,
+      email: user.email,
+      phone: user.phone,
+      address: user.address,
+      image: user.image,
+      role: user.role,
+    },
+  };
+}
 
   async login(loginDto: LoginDto) {
     const user = await this.usersService.findByEmail(loginDto.email);
