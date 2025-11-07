@@ -23,7 +23,9 @@ export class MailService {
     // });
   }
 
-  async sendResetPasswordEmail(email: string, resetCode: string) {
+  async sendResetPasswordEmail(email: string, token: string) {
+    const resetLink = `http://yourapp.com/reset-password?token=${token}`;
+
     const mailOptions = {
       from: 'jridiemna04@gmail.com',  // ← Change this
       to: email,
@@ -33,7 +35,7 @@ export class MailService {
           <h2>Password Reset Request</h2>
           <p>You requested to reset your password. Use the code below:</p>
           <div style="background-color: #f4f4f4; padding: 15px; border-radius: 5px; text-align: center; margin: 20px 0;">
-            <h1 style="color: #333; letter-spacing: 5px;">${resetCode}</h1>
+            <h1 style="color: #333; letter-spacing: 5px;">${resetLink}</h1>
           </div>
           <p>This code will expire in <strong>15 minutes</strong>.</p>
           <p>If you didn't request this, please ignore this email.</p>

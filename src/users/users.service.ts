@@ -68,17 +68,7 @@ export class UsersService {
     await this.userModel.findByIdAndUpdate(userId, { refreshToken: hashedToken });
   }
 
-  async setResetPasswordCode(email: string) {
-    const code = Math.random().toString(36).substring(2, 8).toUpperCase();
-    const expires = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
-
-    await this.userModel.findOneAndUpdate(
-      { email },
-      { resetPasswordCode: code, resetPasswordExpires: expires }
-    );
-
-    return code;
-  }
+ 
 
   async resetPassword(resetCode: string, newPassword: string) {
     const user = await this.userModel.findOne({

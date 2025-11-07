@@ -1,5 +1,5 @@
 import { Controller, Post, Body } from '@nestjs/common';
-import { ApiTags, ApiOperation } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiBody } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
@@ -35,12 +35,16 @@ async register(@Body() createUserDto: CreateUserDto) {
     return this.authService.forgotPassword(forgotPasswordDto.email);
   }
 
-  @Post('reset-password')
-  @ApiOperation({ summary: 'Reset password with code' })
-  resetPassword(@Body() resetPasswordDto: ResetPasswordDto) {
-    return this.authService.resetPassword(
-      resetPasswordDto.resetCode,
-      resetPasswordDto.newPassword
-    );
+@Post('reset-password')
+@ApiBody({
+  schema: {
+    example: {
+      newPassword: 'MyNewPassword123',
+      resetToken: 'a2b3c4d5e6...',
+    },
+  },
+})
+  async resetPassword(@Body() dto: ResetPasswordDto) {
+    return this.authService.resetPassword(dto.newPassword, dto.resetToken);
   }
 }

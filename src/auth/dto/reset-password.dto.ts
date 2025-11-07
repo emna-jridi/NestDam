@@ -1,13 +1,11 @@
-import { ApiProperty } from '@nestjs/swagger';
-import { IsNotEmpty, MinLength } from 'class-validator';
+import { IsString, Matches, MinLength } from 'class-validator';
 
 export class ResetPasswordDto {
-  @ApiProperty({ example: 'abc123resetcode' })
-  @IsNotEmpty()
-  resetCode: string;
+  @IsString()
+  resetToken: string;
 
-  @ApiProperty({ example: 'newpassword123', minLength: 6 })
-  @IsNotEmpty()
+  @IsString()
   @MinLength(6)
+  @Matches(/^(?=.*[0-9])/, { message: 'Password must contain at least one number' })
   newPassword: string;
 }
