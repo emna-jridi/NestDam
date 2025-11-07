@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Request } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Request, NotFoundException, Req } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags, ApiOperation } from '@nestjs/swagger';
 import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
@@ -6,10 +6,11 @@ import { UpdateUserDto } from './dto/update-user.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
+import { UpdateAvatarDto } from './dto/update-avatar.dto';
 @ApiTags('users')
 @Controller('users')
 export class UsersController {
-  constructor(private readonly usersService: UsersService) {}
+  constructor(private readonly usersService: UsersService) { }
 
   // @Post('register')
   // @ApiOperation({ summary: 'Register new user ' })
@@ -26,7 +27,7 @@ export class UsersController {
     return this.usersService.findAll();
   }
 
-  @Get('me')
+  @Get('profile')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get my profile (Mobile App)' })
@@ -44,11 +45,19 @@ export class UsersController {
 
   @Delete(':id')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('admin')
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Delete user (Admin only - Web)' })
+  @ApiOperation({ summary: 'Delete user ' })
   remove(@Param('id') id: string) {
     this.usersService.remove(id);
     return { message: 'User deleted' };
+  }
+  @UseGuards(JwtAuthGuard)
+  @Patch('avatar')
+  @ApiBearerAuth()
+
+  async updateAvatar(@Req() req, @Body() updateAvatarDto: UpdateAvatarDto) {
+    const { avatar } = updateAvatarDto;
+
+    return this.usersService.updateAvatar(req.user.userId, avatar);
   }
 }

@@ -27,6 +27,7 @@ export class AuthService {
   async register(createUserDto: CreateUserDto) {
     //  Create the new user
     const user = await this.usersService.create(createUserDto);
+    // DiceBear avatar URL (Bottts style)
     // user info
     return {
 
@@ -38,6 +39,7 @@ export class AuthService {
         address: user.address,
         image: user.image,
         role: user.role,
+        avatar: user.avatarUrl,
       },
     };
   }
@@ -64,7 +66,6 @@ export class AuthService {
         name: user.name,
         phone: user.phone,
         address: user.address,
-        image: user.image,
         role: user.role,
       },
     };

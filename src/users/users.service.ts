@@ -17,10 +17,14 @@ export class UsersService {
     }
 
     const hashedPassword = await bcrypt.hash(createUserDto.password, 10);
+    const avatarUrl = `https://avatars.dicebear.com/api/croodles/${encodeURIComponent(createUserDto.email)}.svg`;
+
     const user = new this.userModel({
       ...createUserDto,
       password: hashedPassword,
       role,
+      avatar: avatarUrl,
+
     });
 
     await user.save();
@@ -62,6 +66,19 @@ export class UsersService {
       throw new NotFoundException('User not found');
     }
   }
+async updateAvatar(userId: string, avatarUrl: string) {
+  console.log('Updating avatar for userId:', userId);
+
+  const user = await this.userModel.findByIdAndUpdate(
+    userId,
+    { avatar: avatarUrl },
+    { new: true },
+  );
+  console.log(user)
+
+  if (!user) throw new NotFoundException('User not found');
+  return this.sanitizeUser(user);
+}
 
   async updateRefreshToken(userId: string, refreshToken: string) {
     const hashedToken = await bcrypt.hash(refreshToken, 10);
@@ -88,6 +105,7 @@ export class UsersService {
     });
   }
 
+  // Supprime les champs sensibles (mot de passe, token) avant de renvoyer l'utilisateur  
   private sanitizeUser(user: any) {
     const obj = user.toObject();
     delete obj.password;

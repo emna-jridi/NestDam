@@ -20,15 +20,13 @@ export class User {
   @Prop({ required: true })
   address: string;
 
-  @Prop()
-  image: string;
-
+ @Prop({ default: '' })
+  avatar: string;
   @Prop({ default: 'user', enum: ['user', 'admin'] })
   role: string;
 
   @Prop()
   refreshToken: string;
-
 
   @Prop()
   resetPasswordCode: string;

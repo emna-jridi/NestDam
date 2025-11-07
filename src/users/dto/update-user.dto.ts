@@ -16,5 +16,5 @@ export class UpdateUserDto {
 
   @ApiProperty({ required: false })
   @IsOptional()
-  image?: string;
+  avatar?: string;
 }
