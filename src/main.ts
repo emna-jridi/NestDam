@@ -8,7 +8,6 @@ async function bootstrap() {
   
   app.useGlobalPipes(new ValidationPipe());
   app.enableCors();
-
   const config = new DocumentBuilder()
     .setTitle('User Management API')
     .setDescription('Simple user management - Mobile App (User) & Web (Admin)')
