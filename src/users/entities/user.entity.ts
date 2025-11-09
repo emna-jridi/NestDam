@@ -21,7 +21,7 @@ export class User {
   address: string;
 
   @Prop({ default: '' })
-  avatarUrl: string;
+  avatar: string;
   @Prop({ default: 'user', enum: ['user', 'admin'] })
   role: string;
 

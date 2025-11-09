@@ -24,5 +24,5 @@ export class CreateUserDto {
   address: string;
 
   @ApiProperty({ example: 'https://example.com/photo.jpg', required: false })
-  avatarUrl?: string;
+  avatar?: string;
 }

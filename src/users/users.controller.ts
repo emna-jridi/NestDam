@@ -36,13 +36,15 @@ export class UsersController {
     return this.usersService.findOne(req.user.userId);
   }
 
-  @Patch('me')
-  @UseGuards(JwtAuthGuard)
-  @ApiBearerAuth()
-  @ApiOperation({ summary: 'Update my profile (Mobile App)' })
-  updateProfile(@Request() req, @Body() updateUserDto: UpdateUserDto) {
-    return this.usersService.update(req.user.userId, updateUserDto);
-  }
+@Patch('me')
+@UseGuards(JwtAuthGuard) // ou votre guard d'authentification
+async updateProfile(@Req() req, @Body() updateUserDto: UpdateUserDto) {
+  const userId = req.user.userId;
+  console.log('🔄 Demande de mise à jour pour:', req.user.id);
+  console.log('📨 Données reçues:', updateUserDto);
+  
+  return this.usersService.update(userId, updateUserDto);
+}
 
   @Delete(':id')
   @UseGuards(JwtAuthGuard, RolesGuard)

@@ -8,7 +8,7 @@ import * as bcrypt from 'bcrypt';
 
 @Injectable()
 export class UsersService {
-  constructor(@InjectModel(User.name) private userModel: Model<UserDocument>) {}
+  constructor(@InjectModel(User.name) private userModel: Model<UserDocument>) { }
 
   async create(createUserDto: CreateUserDto, role: string = 'user') {
     const exists = await this.userModel.findOne({ email: createUserDto.email });
@@ -17,8 +17,7 @@ export class UsersService {
     }
 
     const hashedPassword = await bcrypt.hash(createUserDto.password, 10);
-    const avatarUrl = `https://avatars.dicebear.com/api/croodles/${encodeURIComponent(createUserDto.email)}.svg`;
-
+    const avatarUrl = `https://api.dicebear.com/9.x/croodles/svg?seed=${encodeURIComponent(createUserDto.email)}`;
     const user = new this.userModel({
       ...createUserDto,
       password: hashedPassword,
@@ -41,51 +40,62 @@ export class UsersService {
     if (!user) {
       throw new NotFoundException('User not found');
     }
-    
+
     return this.sanitizeUser(user);
   }
 
   async findByEmail(email: string) {
     return this.userModel.findOne({ email }).exec();
   }
-
   async update(id: string, updateUserDto: UpdateUserDto) {
+    // Construire l'objet de mise à jour dynamiquement
+    const updateData: any = {};
+
+    // Ajouter seulement les champs présents dans le DTO
+    if (updateUserDto.name !== undefined) updateData.name = updateUserDto.name;
+    if (updateUserDto.phone !== undefined) updateData.phone = updateUserDto.phone;
+    if (updateUserDto.address !== undefined) updateData.address = updateUserDto.address;
+    if (updateUserDto.avatar !== undefined) updateData.avatar = updateUserDto.avatar;
+
+
     const user = await this.userModel.findByIdAndUpdate(
       id,
-      updateUserDto,
+      updateData,
       { new: true }
     );
+
     if (!user) {
       throw new NotFoundException('User not found');
     }
+
+    console.log('✅ Utilisateur mis à jour:', user);
     return this.sanitizeUser(user);
   }
-
   async remove(id: string) {
     const result = await this.userModel.findByIdAndDelete(id);
     if (!result) {
       throw new NotFoundException('User not found');
     }
   }
-async updateAvatar(userId: string, avatarUrl: string) {
+  async updateAvatar(userId: string, avatarUrl: string) {
 
-  const user = await this.userModel.findByIdAndUpdate(
-    userId,
-    { avatar: avatarUrl },
-    { new: true },
-  );
-  console.log(user)
+    const user = await this.userModel.findByIdAndUpdate(
+      userId,
+      { avatar: avatarUrl },
+      { new: true },
+    );
+    console.log(user)
 
-  if (!user) throw new NotFoundException('User not found');
-  return this.sanitizeUser(user);
-}
+    if (!user) throw new NotFoundException('User not found');
+    return this.sanitizeUser(user);
+  }
 
   async updateRefreshToken(userId: string, refreshToken: string) {
     const hashedToken = await bcrypt.hash(refreshToken, 10);
     await this.userModel.findByIdAndUpdate(userId, { refreshToken: hashedToken });
   }
 
- 
+
 
   async resetPassword(resetCode: string, newPassword: string) {
     const user = await this.userModel.findOne({
