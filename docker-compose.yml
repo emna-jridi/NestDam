@@ -1,0 +1,10 @@
+version: "3.8"
+services:
+  mobsf:
+    image: opensecurity/mobile-security-framework-mobsf:latest
+    container_name: mobsf
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./mobsf_data:/root/.MobSF
+    restart: unless-stopped

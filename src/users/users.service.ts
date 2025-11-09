@@ -41,6 +41,7 @@ export class UsersService {
     if (!user) {
       throw new NotFoundException('User not found');
     }
+    
     return this.sanitizeUser(user);
   }
 
@@ -67,7 +68,6 @@ export class UsersService {
     }
   }
 async updateAvatar(userId: string, avatarUrl: string) {
-  console.log('Updating avatar for userId:', userId);
 
   const user = await this.userModel.findByIdAndUpdate(
     userId,

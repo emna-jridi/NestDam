@@ -23,26 +23,27 @@ export class AuthService {
     @InjectModel(User.name) private UserModel: Model<User>,
 
   ) { }
+async register(createUserDto: CreateUserDto) {
+  // Create the new user
+  const user = await this.usersService.create(createUserDto);
 
-  async register(createUserDto: CreateUserDto) {
-    //  Create the new user
-    const user = await this.usersService.create(createUserDto);
-    // DiceBear avatar URL (Bottts style)
-    // user info
-    return {
+  // Generate DiceBear avatar (you already do this inside create())
+  const avatarUrl = `https://api.dicebear.com/8.x/adventurer/svg?seed=${encodeURIComponent(createUserDto.email)}`;
 
-      user: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        phone: user.phone,
-        address: user.address,
-        image: user.image,
-        role: user.role,
-        avatar: user.avatarUrl,
-      },
-    };
-  }
+  // Return sanitized user data
+  return {
+    user: {
+      id: user._id,
+      name: user.name,
+      email: user.email,
+      phone: user.phone,
+      address: user.address,
+      role: user.role,
+      avatar: user.avatar || avatarUrl, // ✅ fallback if missing
+    },
+  };
+}
+
 
   async login(loginDto: LoginDto) {
     const user = await this.usersService.findByEmail(loginDto.email);
@@ -125,6 +126,7 @@ export class AuthService {
 
       return {
         message: 'Reset code sent to your email',
+        token: resetToken 
       };
     }
   }

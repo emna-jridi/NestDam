@@ -20,8 +20,8 @@ export class User {
   @Prop({ required: true })
   address: string;
 
- @Prop({ default: '' })
-  avatar: string;
+  @Prop({ default: '' })
+  avatarUrl: string;
   @Prop({ default: 'user', enum: ['user', 'admin'] })
   role: string;
 

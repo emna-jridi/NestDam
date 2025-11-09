@@ -32,6 +32,7 @@ export class UsersController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get my profile (Mobile App)' })
   getProfile(@Request() req) {
+
     return this.usersService.findOne(req.user.userId);
   }
 
