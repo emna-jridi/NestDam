@@ -12,6 +12,9 @@ import { UsersModule } from './users/users.module';
 import { AuthModule } from './auth/auth.module';
 import { MailModule } from './mail/mail.module';
 import { ScanModule } from './scan/scan.module';
+import { AppRegistryModule } from './app-registry/app-registry.module';
+import { ExternalApisModule } from './external-apis/external-apis.module';
+import { AnalysisModule } from './analysis/analysis.module';
 
 @Module({
   imports: [
@@ -26,6 +29,9 @@ import { ScanModule } from './scan/scan.module';
     AuthModule,
     MailModule,
     ScanModule,
+    AppRegistryModule,
+    ExternalApisModule,
+    AnalysisModule,
   ],
   controllers: [],
   providers: [],

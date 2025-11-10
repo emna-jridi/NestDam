@@ -17,6 +17,8 @@ export class Scan extends Document {
 
   @Prop({ type: Object })
   report?: any;
+  createdAt?: Date;
+  updatedAt?: Date;
 }
 
 export const ScanSchema = SchemaFactory.createForClass(Scan);

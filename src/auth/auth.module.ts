@@ -6,8 +6,8 @@ import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { JwtStrategy } from './jwt.strategy';
 import { UsersModule } from '../users/users.module';
-import { MailModule } from 'src/mail/mail.module';
-import { User, UserSchema } from 'src/users/entities/user.entity';
+import { MailModule } from '../mail/mail.module';
+import { User, UserSchema } from '../users/entities/user.entity';
 import { ResetToken, ResetTokenSchema } from './entities/reset-token.schema';
 
 @Module({

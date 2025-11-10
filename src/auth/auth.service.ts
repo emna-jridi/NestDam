@@ -3,14 +3,14 @@ import { JwtService } from '@nestjs/jwt';
 import { UsersService } from '../users/users.service';
 import { LoginDto } from './dto/login.dto';
 import * as bcrypt from 'bcrypt';
-import { MailService } from 'src/mail/mail.service';
-import { CreateUserDto } from 'src/users/dto/create-user.dto';
+import { MailService } from '../mail/mail.service';
+import { CreateUserDto } from '../users/dto/create-user.dto';
 import { nanoid } from 'nanoid';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { async } from 'rxjs';
 import { ResetToken } from './entities/reset-token.schema';
-import { User } from 'src/users/entities/user.entity';
+import { User } from '../users/entities/user.entity';
 
 @Injectable()
 export class AuthService {
