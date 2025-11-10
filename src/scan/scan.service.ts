@@ -113,7 +113,7 @@ export class ScanService {
         .map(r => ({ packageName: r.packageName, name: r.name, score: r.score })),
     };
   }
-  // ⭐ NOUVEAU : Rechercher la sécurité d'une app (avant installation)
+  //  NOUVEAU : Rechercher la sécurité d'une app (avant installation)
   async searchAppSecurity(packageName: string) {
     this.logger.log(`Searching security info for: ${packageName}`);
 

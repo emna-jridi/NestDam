@@ -24,7 +24,7 @@ export class ScanController {
   constructor(
     private readonly scanService: ScanService,
     private readonly appRegistryService: AppRegistryService,
-  ) {}
+  ) { }
 
   // ⭐ NOUVEAU : Analyser les apps installées depuis le mobile
   @Post('installed')
@@ -57,7 +57,10 @@ export class ScanController {
             category: app.category,
             iconUrl: app.iconUrl,
             privacyScore: app.privacyScore,
-            trackers: app.trackers.length,
+            trackers: {
+              total: app.trackers.length,
+              list: app.trackers, // ou [] si tu n’as pas les détails
+            }
           })),
         };
       }
@@ -91,14 +94,14 @@ export class ScanController {
     }
 
     const tempPath = `/tmp/${Date.now()}_${file.originalname}`;
-    
+
     try {
       fs.writeFileSync(tempPath, file.buffer);
       const result = await this.scanService.uploadApk(tempPath);
-      
+
       // Nettoyer le fichier temporaire
       fs.unlinkSync(tempPath);
-      
+
       return result;
     } catch (error) {
       // Nettoyer en cas d'erreur
@@ -157,7 +160,7 @@ export class ScanController {
 
   private generateComparison(apps: any[]) {
     const sorted = [...apps].sort((a, b) => b.privacyScore - a.privacyScore);
-    
+
     return {
       bestChoice: sorted[0],
       worstChoice: sorted[sorted.length - 1],
