@@ -1,4 +1,3 @@
-
 import { Controller, Get, Query, Param } from '@nestjs/common';
 import { AppRegistryService } from './app-registry.service';
 import { SearchAppDto } from './dto/search-query.dto';

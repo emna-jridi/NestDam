@@ -1,4 +1,3 @@
-
 import { Injectable, Logger } from '@nestjs/common';
 import axios from 'axios';
 
@@ -46,7 +45,7 @@ export class ExodusPrivacyService {
     if (!app) return null;
 
     const report = await this.getAppReport(app.id);
-    
+
     return {
       packageName: app.handle,
       name: app.name,
@@ -62,7 +61,7 @@ export class ExodusPrivacyService {
 
     let score = 100;
     const trackerCount = report.trackers?.length || 0;
-    
+
     // -5 points par tracker
     score -= trackerCount * 5;
 

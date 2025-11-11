@@ -1,4 +1,3 @@
-
 import { Injectable, Logger } from '@nestjs/common';
 import axios from 'axios';
 import FormData from 'form-data';
@@ -23,7 +22,7 @@ export class MobsfService {
       const response = await axios.post(
         `${this.mobsfUrl}/api/v1/upload`,
         form,
-        { headers }
+        { headers },
       );
       return response.data;
     } catch (error) {
@@ -42,11 +41,9 @@ export class MobsfService {
     };
 
     try {
-      const response = await axios.post(
-        `${this.mobsfUrl}/api/v1/scan`,
-        form,
-        { headers }
-      );
+      const response = await axios.post(`${this.mobsfUrl}/api/v1/scan`, form, {
+        headers,
+      });
       return response.data;
     } catch (error) {
       this.logger.error('MobSF scan failed', error);
@@ -67,7 +64,7 @@ export class MobsfService {
       const response = await axios.post(
         `${this.mobsfUrl}/api/v1/report_json`,
         form,
-        { headers }
+        { headers },
       );
       return response.data;
     } catch (error) {

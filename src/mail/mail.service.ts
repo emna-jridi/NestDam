@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import * as nodemailer from 'nodemailer';
-import * as dotenv from "dotenv";
-dotenv.config();
+// dotenv is loaded centrally in `src/main.ts` via `import 'dotenv/config'`.
+// Keep `.env` loading centralized to ensure environment variables are available before module initialization.
 
 @Injectable()
 export class MailService {
@@ -9,11 +9,11 @@ export class MailService {
 
   constructor() {
     this.transporter = nodemailer.createTransport({
-      host: "smtp.sendgrid.net",
+      host: 'smtp.sendgrid.net',
       port: 587,
       secure: false,
       auth: {
-        user: "apikey",
+        user: 'apikey',
         pass: process.env.SENDGRID_API_KEY,
       },
     });
@@ -116,7 +116,7 @@ export class MailService {
 
     try {
       const result = await this.transporter.sendMail(mailOptions);
-      console.log("Email sent successfully:", result.messageId);
+      console.log('Email sent successfully:', result.messageId);
       return true;
     } catch (error) {
       console.error('Error sending email:', error);
@@ -172,7 +172,7 @@ export class MailService {
 
     try {
       const result = await this.transporter.sendMail(mailOptions);
-      console.log("Welcome email sent:", result.messageId);
+      console.log('Welcome email sent:', result.messageId);
       return true;
     } catch (error) {
       console.error('Error sending email:', error);

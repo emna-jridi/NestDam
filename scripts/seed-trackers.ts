@@ -19,17 +19,17 @@ interface ExodusTracker {
 
 async function bootstrap() {
   const app = await NestFactory.createApplicationContext(AppModule);
-  
+
   const exodusService = app.get(ExodusPrivacyService);
   const trackerModel = app.get<Model<Tracker>>('TrackerModel');
-  
+
   console.log('📥 Fetching trackers from Exodus Privacy...');
-  
+
   const trackers = await exodusService.getAllTrackers();
   const trackerArray = Object.values(trackers) as ExodusTracker[];
-  
+
   console.log(`Found ${trackerArray.length} trackers`);
-  
+
   for (const tracker of trackerArray) {
     await trackerModel.findOneAndUpdate(
       { name: tracker.name },
@@ -42,10 +42,10 @@ async function bootstrap() {
         exodusId: tracker.id,
         privacyImpact: calculatePrivacyImpact(tracker),
       },
-      { upsert: true, new: true }
+      { upsert: true, new: true },
     );
   }
-  
+
   console.log('✅ Trackers seeded successfully!');
   await app.close();
 }

@@ -1,4 +1,3 @@
-
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document } from 'mongoose';
 
@@ -15,10 +14,10 @@ export class Permission extends Document {
   name: string; // android.permission.CAMERA
 
   @Prop()
-  displayName: string; 
+  displayName: string;
 
   @Prop()
-  category: string; 
+  category: string;
   @Prop()
   description: string;
 

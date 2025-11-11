@@ -1,4 +1,3 @@
-
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
@@ -70,7 +69,8 @@ export class AppRegistryService {
   }
 
   private shouldRefresh(app: AppDocument): boolean {
-    const daysSinceUpdate = (Date.now() - app.lastUpdated.getTime()) / (1000 * 60 * 60 * 24);
+    const daysSinceUpdate =
+      (Date.now() - app.lastUpdated.getTime()) / (1000 * 60 * 60 * 24);
     return daysSinceUpdate > 7; // Refresh si > 7 jours
   }
 
@@ -119,10 +119,13 @@ export class AppRegistryService {
     }
 
     // Compléter avec Play Store
-    const playStoreResults = await this.playStoreService.searchApp(query, limit - dbResults.length);
-    
+    const playStoreResults = await this.playStoreService.searchApp(
+      query,
+      limit - dbResults.length,
+    );
+
     const newApps = await Promise.all(
-      playStoreResults.map(result => this.getOrCreateApp(result.appId))
+      playStoreResults.map((result) => this.getOrCreateApp(result.appId)),
     );
 
     return [...dbResults, ...newApps];
