@@ -8,8 +8,6 @@ import { UsersService } from '../../user-management/services/users.service';
 import { LoginDto } from '../dto/login.dto';
 import * as bcrypt from 'bcrypt';
 import { MailService } from '../../mail/mail.service';
-import { CreateUserDto } from '../../user-management/dto/create-user.dto';
-import { BasicRoles } from '../../user-management/enums/basic-roles.enum';
 import { nanoid } from 'nanoid';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
@@ -41,7 +39,7 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    const tokens = await this.generateTokens(user);
+    const tokens = this.generateTokens(user);
     await this.usersService.updateRefreshToken(
       user._id.toString(),
       tokens.refreshToken,
@@ -62,7 +60,7 @@ export class AuthService {
 
   async refreshToken(refreshToken: string) {
     try {
-      const payload = this.jwtService.verify(refreshToken, {
+      const payload = this.jwtService.verify<{ email: string }>(refreshToken, {
         secret:
           process.env.REFRESH_TOKEN_SECRET ||
           'your-refresh-secret-change-in-production',
@@ -78,7 +76,7 @@ export class AuthService {
         throw new UnauthorizedException('Invalid refresh token');
       }
 
-      const tokens = await this.generateTokens(user);
+      const tokens = this.generateTokens(user);
       await this.usersService.updateRefreshToken(
         user._id.toString(),
         tokens.refreshToken,
