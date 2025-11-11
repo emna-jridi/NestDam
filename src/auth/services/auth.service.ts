@@ -1,16 +1,20 @@
-import { Injectable, InternalServerErrorException, UnauthorizedException } from '@nestjs/common';
+import {
+  Injectable,
+  InternalServerErrorException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { UsersService } from '../users/users.service';
-import { LoginDto } from './dto/login.dto';
+import { UsersService } from '../../user-management/services/users.service';
+import { LoginDto } from '../dto/login.dto';
 import * as bcrypt from 'bcrypt';
-import { MailService } from '../mail/mail.service';
-import { CreateUserDto } from '../users/dto/create-user.dto';
+import { MailService } from '../../mail/mail.service';
+import { CreateUserDto } from '../../user-management/dto/create-user.dto';
+import { BasicRoles } from '../../user-management/enums/basic-roles.enum';
 import { nanoid } from 'nanoid';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import { async } from 'rxjs';
-import { ResetToken } from './entities/reset-token.schema';
-import { User } from '../users/entities/user.entity';
+import { ResetToken } from '../entities/reset-token.schema';
+import { User, UserDocument } from '../../user-management/entities/user.entity';
 
 @Injectable()
 export class AuthService {
@@ -21,29 +25,7 @@ export class AuthService {
     @InjectModel(ResetToken.name) private resetTokenModel: Model<ResetToken>,
 
     @InjectModel(User.name) private UserModel: Model<User>,
-
-  ) { }
-async register(createUserDto: CreateUserDto) {
-  // Create the new user
-  const user = await this.usersService.create(createUserDto);
-
-  // Generate DiceBear avatar (you already do this inside create())
-  const avatarUrl = `https://api.dicebear.com/8.x/adventurer/svg?seed=${encodeURIComponent(createUserDto.email)}`;
-
-  // Return sanitized user data
-  return {
-    user: {
-      id: user._id,
-      name: user.name,
-      email: user.email,
-      phone: user.phone,
-      address: user.address,
-      role: user.role,
-      avatar: user.avatar || avatarUrl, // ✅ fallback if missing
-    },
-  };
-}
-
+  ) {}
 
   async login(loginDto: LoginDto) {
     const user = await this.usersService.findByEmail(loginDto.email);
@@ -51,13 +33,19 @@ async register(createUserDto: CreateUserDto) {
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    const isPasswordValid = await bcrypt.compare(loginDto.password, user.password);
+    const isPasswordValid = await bcrypt.compare(
+      loginDto.password,
+      user.password,
+    );
     if (!isPasswordValid) {
       throw new UnauthorizedException('Invalid credentials');
     }
 
     const tokens = await this.generateTokens(user);
-    await this.usersService.updateRefreshToken(user._id.toString(), tokens.refreshToken);
+    await this.usersService.updateRefreshToken(
+      user._id.toString(),
+      tokens.refreshToken,
+    );
 
     return {
       ...tokens,
@@ -65,8 +53,8 @@ async register(createUserDto: CreateUserDto) {
         id: user._id,
         email: user.email,
         name: user.name,
+        surname: user.surname,
         phone: user.phone,
-        address: user.address,
         role: user.role,
       },
     };
@@ -75,7 +63,9 @@ async register(createUserDto: CreateUserDto) {
   async refreshToken(refreshToken: string) {
     try {
       const payload = this.jwtService.verify(refreshToken, {
-        secret: 'your-refresh-secret-change-in-production',
+        secret:
+          process.env.REFRESH_TOKEN_SECRET ||
+          'your-refresh-secret-change-in-production',
       });
 
       const user = await this.usersService.findByEmail(payload.email);
@@ -89,7 +79,10 @@ async register(createUserDto: CreateUserDto) {
       }
 
       const tokens = await this.generateTokens(user);
-      await this.usersService.updateRefreshToken(user._id.toString(), tokens.refreshToken);
+      await this.usersService.updateRefreshToken(
+        user._id.toString(),
+        tokens.refreshToken,
+      );
 
       return tokens;
     } catch {
@@ -104,7 +97,6 @@ async register(createUserDto: CreateUserDto) {
       return { message: 'If email exists, reset code will be sent' };
     }
 
-
     if (user) {
       //If user exists, generate password reset link
       const expiryDate = new Date();
@@ -117,7 +109,10 @@ async register(createUserDto: CreateUserDto) {
         expiryDate,
       });
       // Send email with reset code
-      const emailSent = await this.mailService.sendResetPasswordEmail(email, resetToken);
+      const emailSent = await this.mailService.sendResetPasswordEmail(
+        email,
+        resetToken,
+      );
 
       if (!emailSent) {
         console.error('Failed to send reset email to:', email);
@@ -126,7 +121,7 @@ async register(createUserDto: CreateUserDto) {
 
       return {
         message: 'Reset code sent to your email',
-        token: resetToken 
+        token: resetToken,
       };
     }
   }
@@ -152,13 +147,19 @@ async register(createUserDto: CreateUserDto) {
     await user.save();
   }
 
-
-  private async generateTokens(user: any) {
-    const payload = { email: user.email, sub: user._id.toString(), role: user.role };
-
+  private generateTokens(user: UserDocument) {
+    const payload = {
+      email: user.email,
+      sub: user._id.toString(),
+      role: user.role,
+    };
     const accessToken = this.jwtService.sign(payload);
+
+    // Refresh token uses separate secret and expiration (7 days)
     const refreshToken = this.jwtService.sign(payload, {
-      secret: 'your-refresh-secret-change-in-production',
+      secret:
+        process.env.REFRESH_TOKEN_SECRET ||
+        'your-refresh-secret-change-in-production',
       expiresIn: '7d',
     });
 
