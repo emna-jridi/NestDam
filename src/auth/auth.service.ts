@@ -1,4 +1,4 @@
-import {  Injectable, InternalServerErrorException, UnauthorizedException } from '@nestjs/common';
+import {  BadRequestException, Injectable, InternalServerErrorException, NotFoundException, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { UsersService } from '../users/users.service';
 import { LoginDto } from './dto/login.dto';
@@ -11,6 +11,11 @@ import { Model } from 'mongoose';
 import { async } from 'rxjs';
 import { ResetToken } from './entities/reset-token.schema';
 import { User } from '../users/entities/user.entity';
+import { addMinutes } from 'date-fns';
+import { ResetPasswordDto } from './dto/reset-password.dto';
+import { VerifyResetCodeDto } from './dto/verify-reset-code.dto';
+import { ForgotPasswordDto } from './dto/forgot-password.dto';
+import * as crypto from 'crypto';
 
 @Injectable()
 export class AuthService {
@@ -64,7 +69,7 @@ async register(createUserDto: CreateUserDto) {
     };
   }
 
-  async refreshToken(refreshToken: string) {
+async refreshToken(refreshToken: string) {
     try {
       const payload = this.jwtService.verify(refreshToken, {
         secret: 'your-refresh-secret-change-in-production',
@@ -89,61 +94,127 @@ async register(createUserDto: CreateUserDto) {
     }
   }
 
-  async forgotPassword(email: string) {
-    const user = await this.usersService.findByEmail(email);
-    if (!user) {
-      // Don't reveal if email exists (security best practice)
-      return { message: 'If email exists, reset code will be sent' };
-    }
 
-
-    if (user) {
-      //If user exists, generate password reset link
-      const expiryDate = new Date();
-      expiryDate.setHours(expiryDate.getHours() + 1);
-
-      const resetToken = nanoid(64);
-      await this.resetTokenModel.create({
-        token: resetToken,
-        userId: user._id,
-        expiryDate,
-      });
-      // Send email with reset code
-      const emailSent = await this.mailService.sendResetPasswordEmail(email, resetToken);
-
-      if (!emailSent) {
-        console.error('Failed to send reset email to:', email);
-        // Still return success message for security
-      }
-
-      return {
-        message: 'Reset code sent to your email',
-        token: resetToken 
-      };
-    }
+private generateResetCode(length = 6): string {
+  const max = 10 ** length;
+  const num = crypto.randomInt(0, max).toString().padStart(length, '0');
+  return num;
+}
+// 1. Demander un code de réinitialisation
+async requestPasswordReset(forgotpasswordtDto: ForgotPasswordDto) {
+  const user = await this.usersService.findByEmail(forgotpasswordtDto.email);
+  
+  // Pour la sécurité, ne pas révéler si l'email existe ou non
+  if (!user) {
+    return { 
+      message: 'Si cet email existe, un code de réinitialisation a été envoyé.' 
+    };
   }
 
-  async resetPassword(newPassword: string, resetToken: string) {
-    //Find a valid reset token document
-    const token = await this.resetTokenModel.findOneAndDelete({
-      token: resetToken,
-      expiryDate: { $gte: new Date() },
-    });
+  // Générer un code à 6 chiffres
+  const resetCode = this.generateResetCode(6);
+  const resetCodeHash = await bcrypt.hash(resetCode, 10);
+  const expiry = addMinutes(new Date(), 15); // 15 minutes de validité
 
-    if (!token) {
-      throw new UnauthorizedException('Invalid link');
-    }
+  user.resetPasswordCode = resetCodeHash;
+  user.resetPasswordExpires = expiry;
+  user.resetPasswordAttempts = 0;
+  await user.save();
 
-    //Change user password (MAKE SURE TO HASH!!)
-    const user = await this.UserModel.findById(token.userId);
-    if (!user) {
-      throw new InternalServerErrorException();
-    }
+  // Envoyer l'email avec le code
+  await this.mailService.sendPasswordResetCode(user.email, user.name, resetCode);
 
-    user.password = await bcrypt.hash(newPassword, 10);
+  return { 
+    message: 'Si cet email existe, un code de réinitialisation a été envoyé.' 
+  };
+}
+
+// 2. Vérifier le code de réinitialisation
+async verifyResetCode(verifyResetCodeDto: VerifyResetCodeDto) {
+  const user = await this.usersService.findByEmail(verifyResetCodeDto.email);
+  
+  if (!user) {
+    throw new NotFoundException('Utilisateur non trouvé');
+  }
+
+  if (!user.resetPasswordCode || !user.resetPasswordExpires) {
+    throw new BadRequestException('Aucune demande de réinitialisation trouvée');
+  }
+
+  if (user.resetPasswordExpires < new Date()) {
+    throw new BadRequestException('Le code a expiré. Veuillez demander un nouveau code.');
+  }
+
+  // Limiter les tentatives
+  user.resetPasswordAttempts = (user.resetPasswordAttempts || 0) + 1;
+  
+  if (user.resetPasswordAttempts > 5) {
     await user.save();
+    throw new BadRequestException('Trop de tentatives. Demandez un nouveau code.');
   }
 
+  const isMatch = await bcrypt.compare(
+    verifyResetCodeDto.code, 
+    user.resetPasswordCode
+  );
+
+  if (!isMatch) {
+    await user.save();
+    throw new BadRequestException('Code invalide');
+  }
+
+  // Code valide - réinitialiser les tentatives
+  user.resetPasswordAttempts = 0;
+  await user.save();
+
+  return { 
+    message: 'Code vérifié avec succès',
+    verified: true 
+  };
+}
+
+// 3. Réinitialiser le mot de passe
+async resetPassword(resetPasswordDto: ResetPasswordDto) {
+  const user = await this.usersService.findByEmail(resetPasswordDto.email);
+  
+  if (!user) {
+    throw new NotFoundException('Utilisateur non trouvé');
+  }
+
+  if (!user.resetPasswordCode || !user.resetPasswordExpires) {
+    throw new BadRequestException('Aucune demande de réinitialisation valide');
+  }
+
+  if (user.resetPasswordExpires < new Date()) {
+    throw new BadRequestException('Le code a expiré');
+  }
+
+  // Vérifier à nouveau le code
+  const isMatch = await bcrypt.compare(
+    resetPasswordDto.code, 
+    user.resetPasswordCode
+  );
+
+  if (!isMatch) {
+    throw new BadRequestException('Code invalide');
+  }
+
+  // Changer le mot de passe
+  const hashedPassword = await bcrypt.hash(resetPasswordDto.newPassword, 10);
+  user.password = hashedPassword;
+  
+  // Nettoyer les données de réinitialisation
+  user.resetPasswordCode = undefined;
+  user.resetPasswordExpires = undefined;
+  user.resetPasswordAttempts = 0;
+  
+  await user.save();
+
+  // Optionnel : envoyer un email de confirmation
+  await this.mailService.sendPasswordChangeConfirmation(user.email, user.name);
+
+  return { message: 'Mot de passe réinitialisé avec succès' };
+}
 
   private async generateTokens(user: any) {
     const payload = { email: user.email, sub: user._id.toString(), role: user.role };

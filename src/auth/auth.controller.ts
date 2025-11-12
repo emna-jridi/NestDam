@@ -9,6 +9,7 @@ import { CreateUserDto } from '../users/dto/create-user.dto';
 import { UsersService } from 'src/users/users.service';
 import { VerifyOtpDto } from './dto/verify-otp.dto';
 import { ResendOtpDto } from './dto/resend-otp.dto';
+import { VerifyResetCodeDto } from './dto/verify-reset-code.dto';
 @ApiTags('auth')
 @Controller('auth')
 export class AuthController {
@@ -37,24 +38,25 @@ async register(@Body() createUserDto: CreateUserDto) {
 
 
 
-  @Post('forgot-password')
-  @ApiOperation({ summary: 'Request password reset code' })
-  forgotPassword(@Body() forgotPasswordDto: ForgotPasswordDto) {
-    return this.authService.forgotPassword(forgotPasswordDto.email);
-  }
+// auth.controller.ts
+@Post('request-password-reset')
+@ApiOperation({ summary: 'Demander un code de réinitialisation de mot de passe' })
+requestPasswordReset(@Body() requestPasswordResetDto: ForgotPasswordDto) {
+  return this.authService.requestPasswordReset(requestPasswordResetDto);
+}
+
+@Post('verify-reset-code')
+@ApiOperation({ summary: 'Vérifier le code de réinitialisation' })
+verifyResetCode(@Body() verifyResetCodeDto: VerifyResetCodeDto) {
+  return this.authService.verifyResetCode(verifyResetCodeDto);
+}
 
 @Post('reset-password')
-@ApiBody({
-  schema: {
-    example: {
-      newPassword: 'MyNewPassword123',
-      resetToken: 'a2b3c4d5e6...',
-    },
-  },
-})
-  async resetPassword(@Body() dto: ResetPasswordDto) {
-    return this.authService.resetPassword(dto.newPassword, dto.resetToken);
-  }
+@ApiOperation({ summary: 'Réinitialiser le mot de passe' })
+resetPassword(@Body() resetPasswordDto: ResetPasswordDto) {
+  return this.authService.resetPassword(resetPasswordDto);
+}
+
 
   @Post('verify-otp')
   async verifyOtp(@Body() dto: VerifyOtpDto) {

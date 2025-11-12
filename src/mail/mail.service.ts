@@ -6,6 +6,7 @@ dotenv.config();
 @Injectable()
 export class MailService {
   private transporter;
+  mailerService: any;
 
   constructor() {
     this.transporter = nodemailer.createTransport({
@@ -167,6 +168,128 @@ async sendOtpEmail(email: string, name: string, otp: string) {
     return true;
   } catch (error) {
     console.error('❌ Error sending OTP email:', error);
+    return false;
+  }
+}
+async sendPasswordResetCode(email: string, name: string, code: string) {
+  const mailOptions = {
+    from: 'shadowguardnoreplay@gmail.com',
+    to: email,
+    subject: 'Code de réinitialisation de mot de passe 🔒',
+    html: `
+      <!DOCTYPE html>
+      <html lang="fr">
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <style>
+          body { margin: 0; padding: 0; background-color: #f4f4f4; font-family: Arial, sans-serif; }
+          .container { background-color: #ffffff; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); padding: 40px; max-width: 600px; margin: 20px auto; }
+          h1 { color: #FF5722; font-size: 28px; }
+          .code { font-size: 36px; font-weight: bold; color: #333333; letter-spacing: 6px; background-color: #f8f9fa; padding: 20px; border-radius: 8px; text-align: center; margin: 20px 0; }
+          p { font-size: 16px; color: #666666; line-height: 1.6; }
+          .warning { background-color: #fff3cd; border-left: 4px solid #ffc107; padding: 15px; margin: 20px 0; color: #856404; }
+          .footer { font-size: 13px; color: #999999; border-top: 1px solid #eeeeee; margin-top: 30px; padding-top: 20px; text-align: center; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <h1>Réinitialisation de mot de passe 🔒</h1>
+          <p>Bonjour ${name || 'utilisateur'},</p>
+          <p>Vous avez demandé à réinitialiser votre mot de passe sur <strong>ShadowGuard</strong>.</p>
+          <p>Voici votre code de vérification :</p>
+          
+          <div class="code">${code}</div>
+          
+          <div class="warning">
+            <strong>⚠️ Important :</strong> Ce code est valable pendant <strong>15 minutes</strong>.
+          </div>
+          
+          <p>Entrez ce code dans l'application pour créer un nouveau mot de passe.</p>
+          <p>Si vous n'avez pas demandé cette réinitialisation, veuillez ignorer cet email et votre mot de passe restera inchangé.</p>
+
+          <div class="footer">
+            <p>Pour votre sécurité, ne partagez jamais ce code avec personne.</p>
+            <p>© 2025 ShadowGuard. Tous droits réservés.</p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `,
+  };
+
+  try {
+    const result = await this.transporter.sendMail(mailOptions);
+    console.log('✅ Password reset code email sent:', result.messageId);
+    return true;
+  } catch (error) {
+    console.error('❌ Error sending password reset code email:', error);
+    return false;
+  }
+}
+
+async sendPasswordChangeConfirmation(email: string, name: string) {
+  const mailOptions = {
+    from: 'shadowguardnoreplay@gmail.com',
+    to: email,
+    subject: 'Votre mot de passe a été modifié ✅',
+    html: `
+      <!DOCTYPE html>
+      <html lang="fr">
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <style>
+          body { margin: 0; padding: 0; background-color: #f4f4f4; font-family: Arial, sans-serif; }
+          .container { background-color: #ffffff; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); padding: 40px; max-width: 600px; margin: 20px auto; }
+          h1 { color: #4CAF50; font-size: 28px; }
+          .success-icon { font-size: 64px; text-align: center; margin: 20px 0; }
+          p { font-size: 16px; color: #666666; line-height: 1.6; }
+          .info-box { background-color: #e8f5e9; border-left: 4px solid #4CAF50; padding: 15px; margin: 20px 0; color: #2e7d32; }
+          .alert-box { background-color: #ffebee; border-left: 4px solid #f44336; padding: 15px; margin: 20px 0; color: #c62828; }
+          .footer { font-size: 13px; color: #999999; border-top: 1px solid #eeeeee; margin-top: 30px; padding-top: 20px; text-align: center; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="success-icon">✅</div>
+          <h1>Mot de passe modifié avec succès</h1>
+          <p>Bonjour ${name || 'utilisateur'},</p>
+          
+          <div class="info-box">
+            <strong>✓ Confirmation :</strong> Votre mot de passe a été changé avec succès.
+          </div>
+          
+          <p>Votre mot de passe <strong>ShadowGuard</strong> a été modifié le <strong>${new Date().toLocaleDateString('fr-FR', { 
+            day: 'numeric', 
+            month: 'long', 
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+          })}</strong>.</p>
+          
+          <p>Vous pouvez maintenant vous connecter avec votre nouveau mot de passe.</p>
+          
+          <div class="alert-box">
+            <strong>🔐 Attention :</strong> Si vous n'êtes pas à l'origine de ce changement, veuillez contacter notre support immédiatement.
+          </div>
+
+          <div class="footer">
+            <p>Cet email est envoyé automatiquement, veuillez ne pas y répondre.</p>
+            <p>© 2025 ShadowGuard. Tous droits réservés.</p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `,
+  };
+
+  try {
+    const result = await this.transporter.sendMail(mailOptions);
+    console.log('✅ Password change confirmation email sent:', result.messageId);
+    return true;
+  } catch (error) {
+    console.error('❌ Error sending password change confirmation email:', error);
     return false;
   }
 }

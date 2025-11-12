@@ -19,12 +19,15 @@ export class User {
 
   @Prop()
   refreshToken: string;
+   @Prop()
+  resetPasswordCode?: string; 
 
   @Prop()
-  resetPasswordCode: string;
+  resetPasswordExpires?: Date;
 
-  @Prop()
-  resetPasswordExpires: Date;
+  @Prop({ default: 0 })
+  resetPasswordAttempts?: number;
+
    // OTP fields
   @Prop({ default: null })
   otpHash?: string;          

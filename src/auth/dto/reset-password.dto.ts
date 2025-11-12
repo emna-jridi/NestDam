@@ -1,11 +1,30 @@
-import { IsString, Matches, MinLength } from 'class-validator';
+// reset-password.dto.ts
+import { ApiProperty } from '@nestjs/swagger';
+import { IsEmail, IsNotEmpty, IsString, MinLength } from 'class-validator';
 
 export class ResetPasswordDto {
-  @IsString()
-  resetToken: string;
+  @ApiProperty({
+    description: 'L\'email de l\'utilisateur',
+    example: 'user@example.com'
+  })
+  @IsEmail({}, { message: 'Email invalide' })
+  @IsNotEmpty({ message: 'L\'email est requis' })
+  email: string;
 
+  @ApiProperty({
+    description: 'Le code de réinitialisation vérifié',
+    example: '123456'
+  })
   @IsString()
-  @MinLength(6)
-  @Matches(/^(?=.*[0-9])/, { message: 'Password must contain at least one number' })
+  @IsNotEmpty({ message: 'Le code est requis' })
+  code: string;
+
+  @ApiProperty({
+    description: 'Le nouveau mot de passe',
+    example: 'NewPassword123!'
+  })
+  @IsString()
+  @IsNotEmpty({ message: 'Le mot de passe est requis' })
+  @MinLength(8, { message: 'Le mot de passe doit contenir au moins 8 caractères' })
   newPassword: string;
 }
