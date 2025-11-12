@@ -1,4 +1,3 @@
-
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
@@ -31,7 +30,31 @@ export class TrackerDetectorService {
   ) {}
 
   /**
-   * Analyser une liste de trackers
+   * 🔧 DEBUG: Vérifier l'état de la base de données
+   */
+  async debugDatabase(): Promise<any> {
+    const totalTrackers = await this.trackerModel.countDocuments();
+    const sampleTrackers = await this.trackerModel.find().limit(10).exec();
+    
+    this.logger.log(`📊 Total trackers in DB: ${totalTrackers}`);
+    this.logger.log(`📋 Sample tracker IDs:`, sampleTrackers.map(t => ({
+      exodusId: t.exodusId,
+      name: t.name
+    })));
+    
+    return {
+      totalInDatabase: totalTrackers,
+      sampleIds: sampleTrackers.map(t => t.exodusId),
+      samples: sampleTrackers.map(t => ({
+        exodusId: t.exodusId,
+        name: t.name,
+        category: t.category
+      }))
+    };
+  }
+
+  /**
+   * Analyser une liste de trackers avec DEBUG amélioré
    */
   async analyzeTrackers(trackerIds: number[]): Promise<TrackerDetectionResult> {
     const knownTrackers: TrackerAnalysis[] = [];
@@ -40,30 +63,35 @@ export class TrackerDetectorService {
     let totalPrivacyImpact = 0;
 
     for (const trackerId of trackerIds) {
-      const tracker = await this.trackerModel.findOne({ exodusId: trackerId });
+      const trackerIdAsNumber = Number(trackerId);
+
+      // ✅ Type explicite ajouté
+      const tracker: Tracker | null = await this.trackerModel
+        .findOne({ exodusId: trackerIdAsNumber })
+        .exec();
 
       if (tracker) {
         const analysis: TrackerAnalysis = {
           name: tracker.name,
-          company: tracker.company,
-          category: tracker.category,
-          privacyImpact: tracker.privacyImpact,
-          description: tracker.description,
+          company: tracker.company || 'Unknown',
+          category: tracker.category || 'Other',
+          privacyImpact: tracker.privacyImpact || 5,
+          description: tracker.description || '',
           isKnown: true,
         };
 
         knownTrackers.push(analysis);
-        totalPrivacyImpact += tracker.privacyImpact;
+        totalPrivacyImpact += tracker.privacyImpact || 5;
 
         // Compter par catégorie
-        categories[tracker.category] = (categories[tracker.category] || 0) + 1;
+        const cat = tracker.category || 'Other';
+        categories[cat] = (categories[cat] || 0) + 1;
       } else {
         unknownTrackers.push(`tracker_${trackerId}`);
-        totalPrivacyImpact += 5; // Impact par défaut pour trackers inconnus
+        totalPrivacyImpact += 5;
       }
     }
 
-    // Calculer le score de risque
     const riskScore = this.calculateTrackerRiskScore(
       knownTrackers.length,
       unknownTrackers.length,
@@ -80,21 +108,29 @@ export class TrackerDetectorService {
     };
   }
 
+
   /**
    * Détecter les trackers par noms (depuis analyse statique)
    */
   async detectTrackersByNames(trackerNames: string[]): Promise<TrackerDetectionResult> {
+    this.logger.log(`🔍 Detecting trackers by names: ${trackerNames.join(', ')}`);
+
     const knownTrackers: TrackerAnalysis[] = [];
     const unknownTrackers: string[] = [];
     const categories: { [key: string]: number } = {};
     let totalPrivacyImpact = 0;
 
     for (const name of trackerNames) {
+      this.logger.log(`🔎 Searching for tracker name: "${name}"`);
+      
+      // Recherche insensible à la casse
       const tracker = await this.trackerModel.findOne({ 
         name: { $regex: new RegExp(name, 'i') } 
       });
 
       if (tracker) {
+        this.logger.log(`✅ Found tracker by name: ${tracker.name}`);
+        
         const analysis: TrackerAnalysis = {
           name: tracker.name,
           company: tracker.company,
@@ -108,6 +144,7 @@ export class TrackerDetectorService {
         totalPrivacyImpact += tracker.privacyImpact;
         categories[tracker.category] = (categories[tracker.category] || 0) + 1;
       } else {
+        this.logger.warn(`❌ Tracker name not found: "${name}"`);
         unknownTrackers.push(name);
         totalPrivacyImpact += 7; // Impact plus élevé pour trackers inconnus
       }
@@ -121,6 +158,79 @@ export class TrackerDetectorService {
 
     return {
       totalTrackers: trackerNames.length,
+      knownTrackers,
+      unknownTrackers,
+      categories,
+      totalPrivacyImpact,
+      riskScore,
+    };
+  }
+
+  /**
+   * 🆕 Méthode hybride : chercher par ID OU par nom
+   */
+  async analyzeTrackersFlexible(
+    trackerIdentifiers: Array<number | string>
+  ): Promise<TrackerDetectionResult> {
+    this.logger.log(`🔍 Flexible analysis of ${trackerIdentifiers.length} identifiers`);
+
+    const knownTrackers: TrackerAnalysis[] = [];
+    const unknownTrackers: string[] = [];
+    const categories: { [key: string]: number } = {};
+    let totalPrivacyImpact = 0;
+
+    for (const identifier of trackerIdentifiers) {
+      let tracker: Tracker | null = null;
+
+      // Essayer de trouver par exodusId si c'est un nombre
+      if (typeof identifier === 'number' || !isNaN(Number(identifier))) {
+        const numId = Number(identifier);
+        tracker = await this.trackerModel.findOne({ exodusId: numId }).exec();
+        
+        if (tracker) {
+          this.logger.log(`✅ Found by exodusId: ${tracker.name} (${numId})`);
+        }
+      }
+
+      // Si pas trouvé, essayer par nom
+      if (!tracker && typeof identifier === 'string') {
+        tracker = await this.trackerModel.findOne({ 
+          name: { $regex: new RegExp(identifier, 'i') } 
+        }).exec();
+        
+        if (tracker) {
+          this.logger.log(`✅ Found by name: ${tracker.name}`);
+        }
+      }
+
+      if (tracker) {
+        const analysis: TrackerAnalysis = {
+          name: tracker.name,
+          company: tracker.company || 'Unknown',
+          category: tracker.category || 'Other',
+          privacyImpact: tracker.privacyImpact || 5,
+          description: tracker.description || '',
+          isKnown: true,
+        };
+
+        knownTrackers.push(analysis);
+        totalPrivacyImpact += tracker.privacyImpact || 5;
+        categories[tracker.category || 'Other'] = (categories[tracker.category || 'Other'] || 0) + 1;
+      } else {
+        this.logger.warn(`❌ Not found: ${identifier}`);
+        unknownTrackers.push(String(identifier));
+        totalPrivacyImpact += 6;
+      }
+    }
+
+    const riskScore = this.calculateTrackerRiskScore(
+      knownTrackers.length,
+      unknownTrackers.length,
+      totalPrivacyImpact,
+    );
+
+    return {
+      totalTrackers: trackerIdentifiers.length,
       knownTrackers,
       unknownTrackers,
       categories,

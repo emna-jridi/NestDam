@@ -15,6 +15,7 @@ import { ScanModule } from './scan/scan.module';
 import { AppRegistryModule } from './app-registry/app-registry.module';
 import { ExternalApisModule } from './external-apis/external-apis.module';
 import { AnalysisModule } from './analysis/analysis.module';
+import { TrackerDetectorService } from './analysis/tracker-detector.service';
 
 @Module({
   imports: [

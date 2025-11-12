@@ -1,3 +1,4 @@
+import { Prop } from '@nestjs/mongoose';
 import { ApiProperty } from '@nestjs/swagger';
 import { IsEmail, IsNotEmpty, MinLength } from 'class-validator';
 
@@ -15,14 +16,7 @@ export class CreateUserDto {
   @IsNotEmpty()
   name: string;
 
-  @ApiProperty({ example: '+1234567890' })
-  @IsNotEmpty()
-  phone: string;
+  @Prop({ default: 'user' })
+  role: 'user' | 'admin';
 
-  @ApiProperty({ example: '123 Main St, City' })
-  @IsNotEmpty()
-  address: string;
-
-  @ApiProperty({ example: 'https://example.com/photo.jpg', required: false })
-  avatar?: string;
 }

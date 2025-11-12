@@ -12,11 +12,6 @@ import { UpdateAvatarDto } from './dto/update-avatar.dto';
 export class UsersController {
   constructor(private readonly usersService: UsersService) { }
 
-  // @Post('register')
-  // @ApiOperation({ summary: 'Register new user ' })
-  // register(@Body() createUserDto: CreateUserDto) {
-  //   return this.usersService.create(createUserDto, 'user');
-  // }
 
   @Get()
   @UseGuards(JwtAuthGuard, RolesGuard)
@@ -54,13 +49,5 @@ async updateProfile(@Req() req, @Body() updateUserDto: UpdateUserDto) {
     this.usersService.remove(id);
     return { message: 'User deleted' };
   }
-  @UseGuards(JwtAuthGuard)
-  @Patch('avatar')
-  @ApiBearerAuth()
-
-  async updateAvatar(@Req() req, @Body() updateAvatarDto: UpdateAvatarDto) {
-    const { avatar } = updateAvatarDto;
-
-    return this.usersService.updateAvatar(req.user.userId, avatar);
-  }
+  
 }

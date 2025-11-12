@@ -27,19 +27,13 @@ async register(createUserDto: CreateUserDto) {
   // Create the new user
   const user = await this.usersService.create(createUserDto);
 
-  // Generate DiceBear avatar (you already do this inside create())
-  const avatarUrl = `https://api.dicebear.com/8.x/adventurer/svg?seed=${encodeURIComponent(createUserDto.email)}`;
-
   // Return sanitized user data
   return {
     user: {
       id: user._id,
       name: user.name,
       email: user.email,
-      phone: user.phone,
-      address: user.address,
       role: user.role,
-      avatar: user.avatar || avatarUrl, // ✅ fallback if missing
     },
   };
 }
@@ -65,8 +59,6 @@ async register(createUserDto: CreateUserDto) {
         id: user._id,
         email: user.email,
         name: user.name,
-        phone: user.phone,
-        address: user.address,
         role: user.role,
       },
     };

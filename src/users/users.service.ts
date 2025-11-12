@@ -17,12 +17,10 @@ export class UsersService {
     }
 
     const hashedPassword = await bcrypt.hash(createUserDto.password, 10);
-    const avatarUrl = `https://api.dicebear.com/9.x/croodles/svg?seed=${encodeURIComponent(createUserDto.email)}`;
     const user = new this.userModel({
       ...createUserDto,
       password: hashedPassword,
-      role,
-      avatar: avatarUrl,
+      role: 'user',
 
     });
 
@@ -53,11 +51,6 @@ export class UsersService {
 
     // Ajouter seulement les champs présents dans le DTO
     if (updateUserDto.name !== undefined) updateData.name = updateUserDto.name;
-    if (updateUserDto.phone !== undefined) updateData.phone = updateUserDto.phone;
-    if (updateUserDto.address !== undefined) updateData.address = updateUserDto.address;
-    if (updateUserDto.avatar !== undefined) updateData.avatar = updateUserDto.avatar;
-
-
     const user = await this.userModel.findByIdAndUpdate(
       id,
       updateData,
@@ -77,18 +70,7 @@ export class UsersService {
       throw new NotFoundException('User not found');
     }
   }
-  async updateAvatar(userId: string, avatarUrl: string) {
-
-    const user = await this.userModel.findByIdAndUpdate(
-      userId,
-      { avatar: avatarUrl },
-      { new: true },
-    );
-    console.log(user)
-
-    if (!user) throw new NotFoundException('User not found');
-    return this.sanitizeUser(user);
-  }
+ 
 
   async updateRefreshToken(userId: string, refreshToken: string) {
     const hashedToken = await bcrypt.hash(refreshToken, 10);
