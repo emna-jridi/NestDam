@@ -25,6 +25,18 @@ export class User {
 
   @Prop()
   resetPasswordExpires: Date;
+   // OTP fields
+  @Prop({ default: null })
+  otpHash?: string;          
+
+  @Prop({ default: null })
+  otpExpires?: Date;
+
+  @Prop({ default: 0 })
+  otpAttempts?: number;     
+
+  @Prop({ default: false })
+  isVerified?: boolean;   
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);

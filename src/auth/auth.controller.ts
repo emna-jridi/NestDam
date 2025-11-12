@@ -6,10 +6,16 @@ import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { CreateUserDto } from '../users/dto/create-user.dto';
+import { UsersService } from 'src/users/users.service';
+import { VerifyOtpDto } from './dto/verify-otp.dto';
+import { ResendOtpDto } from './dto/resend-otp.dto';
 @ApiTags('auth')
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(private readonly authService: AuthService, 
+      private usersService: UsersService
+
+  ) {}
 
    @Post('register')
 async register(@Body() createUserDto: CreateUserDto) {
@@ -48,5 +54,16 @@ async register(@Body() createUserDto: CreateUserDto) {
 })
   async resetPassword(@Body() dto: ResetPasswordDto) {
     return this.authService.resetPassword(dto.newPassword, dto.resetToken);
+  }
+
+  @Post('verify-otp')
+  async verifyOtp(@Body() dto: VerifyOtpDto) {
+    return this.usersService.verifyOtp(dto);
+  }
+   @Post('resend-otp')
+  @ApiOperation({ summary: 'Renvoyer un code OTP' })
+
+  resendOtp(@Body() resendOtpDto: ResendOtpDto) {
+    return this.usersService.resendOtp(resendOtpDto);
   }
 }

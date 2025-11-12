@@ -1,15 +1,28 @@
-import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { User, UserDocument } from './entities/user.entity';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import * as bcrypt from 'bcrypt';
-
+import * as crypto from 'crypto';
+import { MailService } from '../mail/mail.service'
+import { addMinutes } from 'date-fns';
+import { VerifyOtpDto } from 'src/auth/dto/verify-otp.dto';
+import { ResendOtpDto } from 'src/auth/dto/resend-otp.dto';
 @Injectable()
 export class UsersService {
-  constructor(@InjectModel(User.name) private userModel: Model<UserDocument>) { }
+  constructor(@InjectModel(User.name) private userModel: Model<UserDocument>,
+    private readonly mailService: MailService,
 
+  ) { }
+
+  private generateNumericOtp(length = 6): string {
+    // secure numeric OTP
+    const max = 10 ** length;
+    const num = crypto.randomInt(0, max).toString().padStart(length, '0');
+    return num;
+  }
   async create(createUserDto: CreateUserDto, role: string = 'user') {
     const exists = await this.userModel.findOne({ email: createUserDto.email });
     if (exists) {
@@ -17,14 +30,22 @@ export class UsersService {
     }
 
     const hashedPassword = await bcrypt.hash(createUserDto.password, 10);
+    const otp = this.generateNumericOtp(6);
+    const otpHash = await bcrypt.hash(otp, 10);
+    const otpExpires = addMinutes(new Date(), 10); // 10 minutes validity
     const user = new this.userModel({
       ...createUserDto,
       password: hashedPassword,
       role: 'user',
+      otpHash: otpHash,
+      otpExpires,
+      isVerified: false,
 
     });
 
     await user.save();
+    await this.mailService.sendOtpEmail(user.email, user.name, otp);
+
     return this.sanitizeUser(user);
   }
 
@@ -70,14 +91,11 @@ export class UsersService {
       throw new NotFoundException('User not found');
     }
   }
- 
 
   async updateRefreshToken(userId: string, refreshToken: string) {
     const hashedToken = await bcrypt.hash(refreshToken, 10);
     await this.userModel.findByIdAndUpdate(userId, { refreshToken: hashedToken });
   }
-
-
 
   async resetPassword(resetCode: string, newPassword: string) {
     const user = await this.userModel.findOne({
@@ -96,6 +114,60 @@ export class UsersService {
       resetPasswordExpires: null,
     });
   }
+async verifyOtp(verifyOtpDto: VerifyOtpDto) {
+  const user = await this.findByEmail(verifyOtpDto.identifier);
+  if (!user) throw new NotFoundException('User not found');
+
+  if (user.isVerified) return { message: 'Already verified' };
+
+  if (!user.otpHash || !user.otpExpires) {
+    throw new BadRequestException('No OTP request found. Please request a new code.');
+  }
+
+  if (user.otpExpires < new Date()) {
+    throw new BadRequestException('OTP expired. Please request a new code.');
+  }
+
+  // throttle attempts
+  user.otpAttempts = (user.otpAttempts || 0) + 1;
+  if (user.otpAttempts > 5) {
+    await user.save();
+    throw new BadRequestException('Too many attempts. Request a new OTP.');
+  }
+
+  const isMatch = await bcrypt.compare(verifyOtpDto.code, user.otpHash);
+  if (!isMatch) {
+    await user.save();
+    throw new BadRequestException('Invalid OTP code.');
+  }
+
+  // success: mark verified
+  user.isVerified = true;
+  user.otpHash = undefined;
+  user.otpExpires = undefined;
+  user.otpAttempts = 0;
+  await user.save();
+
+  return { message: 'Email verified successfully' };
+}
+async resendOtp(resendOtpDto: ResendOtpDto) {
+  const user = await this.findByEmail(resendOtpDto.email);
+  if (!user) throw new NotFoundException('User not found');
+
+  // rate limit: at least 60s between resends, or max 3 resends per hour (implement counters/timestamps)
+  const otp = this.generateNumericOtp(6);
+  const otpHash = await bcrypt.hash(otp, 10);
+  const expiry = addMinutes(new Date(), 10);
+
+  user.otpHash = otpHash;
+  user.otpExpires = expiry;
+  user.otpAttempts = 0;
+  await user.save();
+
+  await this.mailService.sendOtpEmail(user.email, user.name, otp);
+
+  return { message: 'OTP resent' };
+}
 
   // Supprime les champs sensibles (mot de passe, token) avant de renvoyer l'utilisateur  
   private sanitizeUser(user: any) {

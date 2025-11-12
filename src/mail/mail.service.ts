@@ -123,60 +123,51 @@ export class MailService {
       return false;
     }
   }
+async sendOtpEmail(email: string, name: string, otp: string) {
+  const mailOptions = {
+    from: 'shadowguardnoreplay@gmail.com',
+    to: email,
+    subject: 'Vérification de votre compte - Code OTP 🔐',
+    html: `
+      <!DOCTYPE html>
+      <html lang="fr">
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <style>
+          body { margin: 0; padding: 0; background-color: #f4f4f4; font-family: Arial, sans-serif; }
+          .container { background-color: #ffffff; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); padding: 40px; max-width: 600px; margin: 20px auto; }
+          h1 { color: #4CAF50; font-size: 28px; }
+          .otp { font-size: 36px; font-weight: bold; color: #333333; letter-spacing: 6px; }
+          p { font-size: 16px; color: #666666; line-height: 1.6; }
+          .footer { font-size: 13px; color: #999999; border-top: 1px solid #eeeeee; margin-top: 30px; padding-top: 20px; text-align: center; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <h1>Bonjour ${name || 'utilisateur'}, 👋</h1>
+          <p>Merci de vous être inscrit sur notre application <strong>ShadowGuard</strong>.</p>
+          <p>Voici votre code de vérification :</p>
+          <p class="otp">${otp}</p>
+          <p>Ce code est valable pendant <strong>10 minutes</strong>.</p>
+          <p>Si vous n'avez pas demandé ce code, vous pouvez ignorer cet e-mail.</p>
 
-  async sendWelcomeEmail(email: string, name: string) {
-    const mailOptions = {
-      from: 'shadowguardnoreplay@gmail.com',
-      to: email,
-      subject: 'Bienvenue sur notre application !',
-      html: `
-        <!DOCTYPE html>
-        <html>
-        <head>
-          <meta charset="UTF-8">
-          <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        </head>
-        <body style="margin: 0; padding: 0; background-color: #f4f4f4;">
-          <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f4f4f4; padding: 20px;">
-            <tr>
-              <td align="center">
-                <table width="600" cellpadding="0" cellspacing="0" style="background-color: #ffffff; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
-                  <tr>
-                    <td style="padding: 40px; text-align: center;">
-                      <h1 style="color: #4CAF50; font-family: Arial, sans-serif; font-size: 32px; margin: 0 0 20px 0;">
-                        Bienvenue ${name}! 🎉
-                      </h1>
-                      <p style="font-family: Arial, sans-serif; font-size: 16px; color: #666666; line-height: 1.6; margin: 0 0 20px 0;">
-                        Merci de vous être inscrit sur notre application.
-                      </p>
-                      <p style="font-family: Arial, sans-serif; font-size: 16px; color: #666666; line-height: 1.6; margin: 0;">
-                        Votre compte a été créé avec succès. Nous sommes ravis de vous compter parmi nous !
-                      </p>
-                    </td>
-                  </tr>
-                  <tr>
-                    <td style="padding: 0 40px 40px 40px; font-family: Arial, sans-serif; font-size: 14px; color: #999999; text-align: center; border-top: 1px solid #eeeeee;">
-                      <p style="margin: 20px 0 0 0; color: #cccccc;">
-                        © 2025 Votre Application. Tous droits réservés.
-                      </p>
-                    </td>
-                  </tr>
-                </table>
-              </td>
-            </tr>
-          </table>
-        </body>
-        </html>
-      `,
-    };
+          <div class="footer">
+            <p>© 2025 ShadowGuard. Tous droits réservés.</p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `,
+  };
 
-    try {
-      const result = await this.transporter.sendMail(mailOptions);
-      console.log("Welcome email sent:", result.messageId);
-      return true;
-    } catch (error) {
-      console.error('Error sending email:', error);
-      return false;
-    }
+  try {
+    const result = await this.transporter.sendMail(mailOptions);
+    console.log('✅ OTP email sent:', result.messageId);
+    return true;
+  } catch (error) {
+    console.error('❌ Error sending OTP email:', error);
+    return false;
   }
+}
 }
