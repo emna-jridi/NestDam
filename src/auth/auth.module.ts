@@ -6,7 +6,7 @@ import { AuthController } from './controllers/auth.controller';
 import { AuthService } from './services/auth.service';
 import { JwtStrategy } from './jwt.strategy';
 import { UsersModule } from '../user-management/users.module';
-import { MailModule } from '../mail/mail.module';
+import { MailModule } from '../shared/mail/mail.module';
 import { User, UserSchema } from '../user-management/entities/user.entity';
 import { ResetToken, ResetTokenSchema } from './entities/reset-token.schema';
 

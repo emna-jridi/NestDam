@@ -7,8 +7,7 @@ import { JwtService } from '@nestjs/jwt';
 import { UsersService } from '../../user-management/services/users.service';
 import { LoginDto } from '../dto/login.dto';
 import * as bcrypt from 'bcrypt';
-import { MailService } from '../../mail/mail.service';
-import { nanoid } from 'nanoid';
+import { MailService } from '../../shared/mail/services/mail.service';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { ResetToken } from '../entities/reset-token.schema';
@@ -95,54 +94,85 @@ export class AuthService {
       return { message: 'If email exists, reset code will be sent' };
     }
 
-    if (user) {
-      //If user exists, generate password reset link
-      const expiryDate = new Date();
-      expiryDate.setHours(expiryDate.getHours() + 1);
+    // Generate a 6-digit numeric OTP
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiryDate = new Date(Date.now() + 1000 * 60 * 15); // 15 minutes
 
-      const resetToken = nanoid(64);
-      await this.resetTokenModel.create({
-        token: resetToken,
-        userId: user._id,
-        expiryDate,
-      });
-      // Send email with reset code
-      const emailSent = await this.mailService.sendResetPasswordEmail(
-        email,
-        resetToken,
-      );
+    await this.resetTokenModel.create({
+      token: code,
+      userId: user._id,
+      expiryDate,
+    });
 
-      if (!emailSent) {
-        console.error('Failed to send reset email to:', email);
-        // Still return success message for security
-      }
-
-      return {
-        message: 'Reset code sent to your email',
-        token: resetToken,
-      };
+    // Send OTP via email (template-based)
+    const emailSent = await this.mailService.sendResetPasswordCode(email, code);
+    if (!emailSent) {
+      console.error('Failed to send reset email to:', email);
     }
+
+    // Always return a neutral message (don't reveal if email exists)
+    return { message: 'If email exists, reset code will be sent' };
   }
 
-  async resetPassword(newPassword: string, resetToken: string) {
-    //Find a valid reset token document
-    const token = await this.resetTokenModel.findOneAndDelete({
-      token: resetToken,
+  async verifyOtp(email: string, otp: string) {
+    // Find the user first
+    const user = await this.usersService.findByEmail(email);
+    if (!user) {
+      throw new UnauthorizedException('Invalid OTP code');
+    }
+
+    // Find the OTP token for this user
+    const token = await this.resetTokenModel.findOne({
+      token: otp,
+      userId: user._id,
       expiryDate: { $gte: new Date() },
     });
 
     if (!token) {
-      throw new UnauthorizedException('Invalid link');
+      throw new UnauthorizedException('Invalid or expired OTP code');
     }
 
-    //Change user password (MAKE SURE TO HASH!!)
+    // OTP is valid - return success (don't delete it yet, user still needs to set password)
+    return {
+      message: 'OTP verified successfully',
+      valid: true,
+    };
+  }
+
+  async resetPassword(newPassword: string, resetToken: string, email?: string) {
+    // Build query - if email provided, validate it matches
+    const query: any = {
+      token: resetToken,
+      expiryDate: { $gte: new Date() },
+    };
+
+    // If email is provided, first find the user and add userId to query
+    if (email) {
+      const user = await this.usersService.findByEmail(email);
+      if (!user) {
+        throw new UnauthorizedException('Invalid or expired reset code');
+      }
+      query.userId = user._id;
+    }
+
+    // Find and DELETE the OTP code (one-time use)
+    const token = await this.resetTokenModel.findOneAndDelete(query);
+
+    if (!token) {
+      throw new UnauthorizedException('Invalid or expired reset code');
+    }
+
+    // Find the user and update password
     const user = await this.UserModel.findById(token.userId);
     if (!user) {
-      throw new InternalServerErrorException();
+      throw new InternalServerErrorException('User not found');
     }
 
+    // Hash and save new password
     user.password = await bcrypt.hash(newPassword, 10);
     await user.save();
+
+    return { message: 'Password successfully reset' };
   }
 
   private generateTokens(user: UserDocument) {

@@ -5,7 +5,7 @@ import { PassportModule } from '@nestjs/passport';
 import { User, UserSchema } from './user-management/entities/user.entity';
 import { UsersModule } from './user-management/users.module';
 import { AuthModule } from './auth/auth.module';
-import { MailModule } from './mail/mail.module';
+import { MailModule } from './shared/mail/mail.module';
 import { ScanModule } from './scan/scan.module';
 import { AppRegistryModule } from './app-registry/app-registry.module';
 import { ExternalApisModule } from './external-apis/external-apis.module';
