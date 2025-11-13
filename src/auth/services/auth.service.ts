@@ -177,23 +177,17 @@ export class AuthService {
 
   private generateTokens(user: UserDocument) {
     const payload = {
-      email: user.email,
       sub: user._id.toString(),
+      email: user.email,
       role: user.role,
     };
     const accessToken = this.jwtService.sign(payload);
 
-    // Refresh token uses separate secret and expiration (7 days)
     const refreshToken = this.jwtService.sign(payload, {
-      secret:
-        process.env.REFRESH_TOKEN_SECRET ||
-        'your-refresh-secret-change-in-production',
+      secret: process.env.REFRESH_TOKEN_SECRET || 'refresh-secret',
       expiresIn: '7d',
     });
 
-    return {
-      accessToken,
-      refreshToken,
-    };
+    return { accessToken, refreshToken };
   }
 }
