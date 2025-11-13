@@ -30,6 +30,7 @@
     "@nestjs/platform-express": "^11.1.8",
     "@nestjs/swagger": "^11.2.1",
     "@nestjs/throttler": "^6.4.0",
+    "@sendgrid/mail": "^8.1.6",
     "axios": "^1.13.2",
     "bcrypt": "^6.0.0",
     "class-transformer": "^0.5.1",
