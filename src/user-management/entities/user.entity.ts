@@ -1,5 +1,5 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { HydratedDocument } from 'mongoose';
+import { HydratedDocument, Types } from 'mongoose';
 import { BasicRoles } from '../enums/basic-roles.enum';
 
 export type UserDocument = HydratedDocument<User>;
@@ -35,6 +35,12 @@ export class User {
 
   @Prop()
   resetPasswordExpires: Date;
+
+  @Prop({ type: [{ type: Types.ObjectId, ref: 'Device' }], default: [] })
+  devices: Types.ObjectId[];
+
+  @Prop({ default: false })
+  isDeviceRegistered: boolean;
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);

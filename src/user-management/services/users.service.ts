@@ -31,6 +31,7 @@ export class UsersService {
       ...createUserDto,
       password: hashedPassword,
       role,
+      isDeviceRegistered: false,
       avatar: avatarUrl,
     });
 

@@ -13,6 +13,7 @@ import { AnalysisModule } from './analysis/analysis.module';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
+import { DevicesModule } from './devices/devices.module';
 
 @Module({
   imports: [
@@ -35,6 +36,7 @@ import { AppService } from './app.service';
     AppRegistryModule,
     ExternalApisModule,
     AnalysisModule,
+    DevicesModule,
   ],
   controllers: [AppController],
   providers: [AppService],
