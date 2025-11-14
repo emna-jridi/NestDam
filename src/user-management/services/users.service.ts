@@ -107,4 +107,16 @@ export class UsersService {
   ): Promise<User | null> {
     return this.userModel.findByIdAndUpdate(id, updateUserDto, { new: true });
   }
+
+  async getProfile(userId: string): Promise<Partial<User>> {
+    const user = await this.userModel
+      .findById(userId)
+      .select(
+        '-password -refreshToken -resetPasswordCode -resetPasswordExpires',
+      );
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+    return user.toObject();
+  }
 }
