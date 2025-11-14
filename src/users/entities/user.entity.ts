@@ -1,5 +1,5 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { Document, HydratedDocument } from 'mongoose';
+import { Document, HydratedDocument, Types } from 'mongoose';
 
 export type UserDocument = HydratedDocument<User>;
 
@@ -19,8 +19,8 @@ export class User {
 
   @Prop()
   refreshToken: string;
-   @Prop()
-  resetPasswordCode?: string; 
+  @Prop()
+  resetPasswordCode?: string;
 
   @Prop()
   resetPasswordExpires?: Date;
@@ -28,18 +28,26 @@ export class User {
   @Prop({ default: 0 })
   resetPasswordAttempts?: number;
 
-   // OTP fields
+  @Prop({ type: Types.ObjectId, ref: 'Avatar' })
+  avatarId?: Types.ObjectId;
+  @Prop()
+  avatarUrl?: string;
+
+  //  Hash unique pour l'avatar
+  @Prop({ unique: true, sparse: true })
+  userHash?: string;
+  // OTP fields
   @Prop({ default: null })
-  otpHash?: string;          
+  otpHash?: string;
 
   @Prop({ default: null })
   otpExpires?: Date;
 
   @Prop({ default: 0 })
-  otpAttempts?: number;     
+  otpAttempts?: number;
 
   @Prop({ default: false })
-  isVerified?: boolean;   
+  isVerified?: boolean;
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);

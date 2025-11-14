@@ -16,6 +16,7 @@ import { AppRegistryModule } from './app-registry/app-registry.module';
 import { ExternalApisModule } from './external-apis/external-apis.module';
 import { AnalysisModule } from './analysis/analysis.module';
 import { TrackerDetectorService } from './analysis/tracker-detector.service';
+import { AvatarModule } from './avatar/avatar.module';
 
 @Module({
   imports: [
@@ -33,6 +34,7 @@ import { TrackerDetectorService } from './analysis/tracker-detector.service';
     AppRegistryModule,
     ExternalApisModule,
     AnalysisModule,
+    AvatarModule,
   ],
   controllers: [],
   providers: [],
