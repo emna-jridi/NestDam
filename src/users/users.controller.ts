@@ -32,7 +32,7 @@ export class UsersController {
   }
 
 @Patch('me')
-@UseGuards(JwtAuthGuard) // ou votre guard d'authentification
+@UseGuards(JwtAuthGuard) 
 async updateProfile(@Req() req, @Body() updateUserDto: UpdateUserDto) {
   const userId = req.user.userId;
   console.log('🔄 Demande de mise à jour pour:', req.user.id);

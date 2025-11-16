@@ -13,7 +13,7 @@ export class VerifyOtpDto {
   @IsNotEmpty({ message: 'Le code OTP est requis' })
   @Length(6, 6, { message: 'Le code OTP doit contenir 6 caractères' })
   @Matches(/^[0-9]+$/, { message: 'Le code OTP doit contenir uniquement des chiffres' })
-  code: string;
+  otp: string;
 
   @ApiProperty({
     description: 'L\'email ou le téléphone de l\'utilisateur',
@@ -21,5 +21,4 @@ export class VerifyOtpDto {
   })
   @IsString()
   @IsNotEmpty({ message: 'L\'identifiant est requis' })
-  identifier: string; // email ou numéro de téléphone
-}
+  email?: string;   }

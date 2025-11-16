@@ -30,9 +30,15 @@ export class User {
 
   @Prop({ type: Types.ObjectId, ref: 'Avatar' })
   avatarId?: Types.ObjectId;
-  @Prop()
-  avatarUrl?: string;
 
+  @Prop()
+  avatarFileName?: string; 
+  @Prop({
+    type: String,
+    enum: ['local', 'google'],
+    default: 'local',
+  })
+  provider: string;
   //  Hash unique pour l'avatar
   @Prop({ unique: true, sparse: true })
   userHash?: string;

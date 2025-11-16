@@ -9,6 +9,8 @@ import { UsersModule } from '../users/users.module';
 import { MailModule } from '../mail/mail.module';
 import { User, UserSchema } from '../users/entities/user.entity';
 import { ResetToken, ResetTokenSchema } from './entities/reset-token.schema';
+import { GoogleModule } from 'src/google/google.module';
+import { GoogleService } from 'src/google/google.service';
 
 @Module({
   imports: [
@@ -25,7 +27,7 @@ import { ResetToken, ResetTokenSchema } from './entities/reset-token.schema';
     ]),
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy],
+  providers: [AuthService, JwtStrategy, GoogleService],
   exports: [AuthService],
 })
 export class AuthModule {}

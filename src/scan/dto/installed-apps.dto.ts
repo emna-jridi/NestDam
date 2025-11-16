@@ -1,7 +1,6 @@
 
 import { IsString, IsBoolean, IsArray, IsOptional, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
-
 export class InstalledAppDto {
   @IsString()
   packageName: string;
@@ -21,6 +20,11 @@ export class InstalledAppDto {
   @IsBoolean()
   @IsOptional()
   isDebuggable?: boolean;
+
+  @IsArray()
+  @IsOptional()
+  @IsString({ each: true })
+  trackers?: string[];
 }
 
 export class AnalyzeInstalledAppsDto {
@@ -28,8 +32,7 @@ export class AnalyzeInstalledAppsDto {
   @ValidateNested({ each: true })
   @Type(() => InstalledAppDto)
   apps: InstalledAppDto[];
-
   @IsString()
   @IsOptional()
-  userHash?: string; // Hash anonyme de l'utilisateur
+  userHash: string; 
 }

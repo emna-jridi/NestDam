@@ -13,87 +13,76 @@ export class AvatarService {
   private readonly logger = new Logger(AvatarService.name);
   private readonly AVATAAARS_URL = 'https://avataaars.io/';
   private readonly UPLOAD_DIR = path.join(process.cwd(), 'uploads', 'avatars');
-  private readonly BASE_URL = process.env.BASE_URL || 'http://localhost:3000';
 
   constructor(
     @InjectModel(Avatar.name) private avatarModel: Model<Avatar>,
   ) {
-    // Créer le dossier uploads/avatars s'il n'existe pas
     this.ensureUploadDirExists();
   }
-
 
   private ensureUploadDirExists() {
     if (!fs.existsSync(this.UPLOAD_DIR)) {
       fs.mkdirSync(this.UPLOAD_DIR, { recursive: true });
-      this.logger.log(` Created upload directory: ${this.UPLOAD_DIR}`);
+      this.logger.log(`📁 Created upload directory: ${this.UPLOAD_DIR}`);
     }
   }
 
   /**
-   * Générer une URL Avataaars à partir d'une config
+   * Générer une URL Avataaars
    */
   private generateAvataaarsUrl(config: any): string {
     const params = new URLSearchParams();
-
     Object.entries(config).forEach(([key, value]) => {
       if (value && key !== 'userHash') {
         params.append(key, value as string);
       }
     });
-
     return `${this.AVATAAARS_URL}?${params.toString()}`;
   }
 
   /**
-   * Télécharger le SVG depuis Avataaars et le sauvegarder localement
+   * Télécharger et sauvegarder l'avatar
+   * ✅ Retourne uniquement le nom du fichier, pas l'URL
    */
   private async downloadAndSaveAvatar(
     userHash: string,
     config: any,
-  ): Promise<{ fileName: string; localPath: string; publicUrl: string }> {
+  ): Promise<{ fileName: string; localPath: string }> {
     try {
-      // Générer l'URL Avataaars
       const avataaarsUrl = this.generateAvataaarsUrl(config);
-
-      // Télécharger le SVG
       const response = await axios.get(avataaarsUrl, {
         responseType: 'arraybuffer',
       });
 
-      // Générer un nom de fichier unique
       const timestamp = Date.now();
       const fileName = `${userHash}-${timestamp}.svg`;
       const localPath = path.join(this.UPLOAD_DIR, fileName);
-      const publicUrl = `${this.BASE_URL}/uploads/avatars/${fileName}`;
 
-      // Sauvegarder le fichier
       fs.writeFileSync(localPath, response.data);
 
-      this.logger.log(` Avatar saved: ${fileName}`);
+      this.logger.log(`✅ Avatar saved: ${fileName}`);
 
       return {
         fileName,
         localPath,
-        publicUrl,
       };
     } catch (error) {
-      this.logger.error(' Error downloading avatar:', error.message);
+      this.logger.error('❌ Error downloading avatar:', error.message);
       throw new Error('Failed to download and save avatar');
     }
   }
 
   /**
-   * Supprimer l'ancien fichier avatar
+   * Supprimer un fichier avatar
    */
   private deleteAvatarFile(localPath: string) {
     try {
       if (fs.existsSync(localPath)) {
         fs.unlinkSync(localPath);
-        this.logger.log(` Deleted old avatar: ${localPath}`);
+        this.logger.log(`🗑️ Deleted old avatar: ${localPath}`);
       }
     } catch (error) {
-      this.logger.error(' Error deleting avatar file:', error.message);
+      this.logger.error('❌ Error deleting avatar file:', error.message);
     }
   }
 
@@ -103,30 +92,24 @@ export class AvatarService {
   async create(createAvatarDto: CreateAvatarDto) {
     const { userHash, ...config } = createAvatarDto;
 
-    // Vérifier si l'utilisateur a déjà un avatar
     const existingAvatar = await this.avatarModel.findOne({ userHash });
 
     if (existingAvatar) {
-      // Supprimer l'ancien fichier
       this.deleteAvatarFile(existingAvatar.localPath);
-
-      // Mettre à jour avec le nouveau
       return this.update(userHash, config);
     }
 
-    // Télécharger et sauvegarder l'avatar
-    const { fileName, localPath, publicUrl } = await this.downloadAndSaveAvatar(
+    // ✅ Télécharger et sauvegarder (retourne fileName uniquement)
+    const { fileName, localPath } = await this.downloadAndSaveAvatar(
       userHash,
       config,
     );
 
-    // Créer l'entrée en base de données
     const avatar = new this.avatarModel({
       userHash,
       config,
       fileName,
       localPath,
-      publicUrl,
     });
 
     await avatar.save();
@@ -136,14 +119,13 @@ export class AvatarService {
       avatar: {
         userHash: avatar.userHash,
         config: avatar.config,
-        url: avatar.publicUrl,
-        fileName: avatar.fileName,
+        fileName: avatar.fileName, // ✅ Retourner uniquement le nom du fichier
       },
     };
   }
 
   /**
-   * Récupérer l'avatar d'un utilisateur
+   * Récupérer un avatar
    */
   async findByUserHash(userHash: string) {
     const avatar = await this.avatarModel.findOne({ userHash });
@@ -155,15 +137,14 @@ export class AvatarService {
     return {
       userHash: avatar.userHash,
       config: avatar.config,
-      url: avatar.publicUrl,
-      fileName: avatar.fileName,
+      fileName: avatar.fileName, // ✅ Retourner uniquement le nom du fichier
       createdAt: avatar.createdAt,
       updatedAt: avatar.updatedAt,
     };
   }
 
   /**
-   * Mettre à jour l'avatar d'un utilisateur
+   * Mettre à jour un avatar
    */
   async update(userHash: string, updateAvatarDto: UpdateAvatarDto) {
     const avatar = await this.avatarModel.findOne({ userHash });
@@ -172,26 +153,21 @@ export class AvatarService {
       throw new NotFoundException(`Avatar not found for user: ${userHash}`);
     }
 
-    // Fusionner l'ancienne config avec la nouvelle
     const newConfig = {
       ...avatar.config,
       ...updateAvatarDto,
     };
 
-    // Supprimer l'ancien fichier
     this.deleteAvatarFile(avatar.localPath);
 
-    // Télécharger et sauvegarder le nouveau
-    const { fileName, localPath, publicUrl } = await this.downloadAndSaveAvatar(
+    const { fileName, localPath } = await this.downloadAndSaveAvatar(
       userHash,
       newConfig,
     );
 
-    // Mettre à jour en base
     avatar.config = newConfig;
     avatar.fileName = fileName;
     avatar.localPath = localPath;
-    avatar.publicUrl = publicUrl;
     avatar.updatedAt = new Date();
 
     await avatar.save();
@@ -201,14 +177,13 @@ export class AvatarService {
       avatar: {
         userHash: avatar.userHash,
         config: avatar.config,
-        url: avatar.publicUrl,
-        fileName: avatar.fileName,
+        fileName: avatar.fileName, // ✅ Retourner uniquement le nom du fichier
       },
     };
   }
 
   /**
-   * Supprimer l'avatar d'un utilisateur
+   * Supprimer un avatar
    */
   async remove(userHash: string) {
     const avatar = await this.avatarModel.findOne({ userHash });
@@ -217,10 +192,7 @@ export class AvatarService {
       throw new NotFoundException(`Avatar not found for user: ${userHash}`);
     }
 
-    // Supprimer le fichier
     this.deleteAvatarFile(avatar.localPath);
-
-    // Supprimer de la base
     await this.avatarModel.deleteOne({ userHash });
 
     return {
@@ -238,7 +210,6 @@ export class AvatarService {
       topType: this.randomChoice([
         'ShortHairShortFlat',
         'ShortHairShortRound',
-        'ShortHairShortWaved',
         'LongHairStraight',
         'LongHairCurly',
         'Hijab',
@@ -248,31 +219,11 @@ export class AvatarService {
         'Blank',
         'Prescription02',
         'Sunglasses',
-        'Wayfarers',
       ]),
-      hairColor: this.randomChoice([
-        'Black',
-        'Brown',
-        'BrownDark',
-        'Blonde',
-        'Red',
-      ]),
-      facialHairType: this.randomChoice([
-        'Blank',
-        'BeardMedium',
-        'BeardLight',
-      ]),
-      clotheType: this.randomChoice([
-        'Hoodie',
-        'ShirtCrewNeck',
-        'BlazerShirt',
-      ]),
-      clotheColor: this.randomChoice([
-        'Black',
-        'Blue01',
-        'Red',
-        'Gray01',
-      ]),
+      hairColor: this.randomChoice(['Black', 'Brown', 'Blonde', 'Red']),
+      facialHairType: this.randomChoice(['Blank', 'BeardMedium', 'BeardLight']),
+      clotheType: this.randomChoice(['Hoodie', 'ShirtCrewNeck', 'BlazerShirt']),
+      clotheColor: this.randomChoice(['Black', 'Blue01', 'Red', 'Gray01']),
       eyeType: this.randomChoice(['Default', 'Happy', 'Squint']),
       eyebrowType: this.randomChoice(['Default', 'RaisedExcited']),
       mouthType: this.randomChoice(['Smile', 'Default', 'Twinkle']),
@@ -283,7 +234,7 @@ export class AvatarService {
   }
 
   /**
-   * Générer un avatar cohérent basé sur le userHash
+   * Générer un avatar cohérent
    */
   async generateConsistent(userHash: string) {
     const seed = this.hashToNumber(userHash);
@@ -295,11 +246,7 @@ export class AvatarService {
         'ShortHairShortRound',
         'LongHairStraight',
       ]),
-      hairColor: this.deterministicChoice(seed, 1, [
-        'Black',
-        'Brown',
-        'Blonde',
-      ]),
+      hairColor: this.deterministicChoice(seed, 1, ['Black', 'Brown', 'Blonde']),
       clotheType: this.deterministicChoice(seed, 2, ['Hoodie', 'ShirtCrewNeck']),
       clotheColor: this.deterministicChoice(seed, 3, ['Blue01', 'Red', 'Black']),
       eyeType: 'Default',
@@ -311,7 +258,7 @@ export class AvatarService {
   }
 
   /**
-   * Obtenir tous les avatars (pour admin)
+   * Obtenir tous les avatars
    */
   async findAll(limit: number = 50) {
     const avatars = await this.avatarModel
@@ -321,16 +268,12 @@ export class AvatarService {
 
     return avatars.map((avatar) => ({
       userHash: avatar.userHash,
-      url: avatar.publicUrl,
-      fileName: avatar.fileName,
+      fileName: avatar.fileName, // ✅ Retourner uniquement le nom du fichier
       updatedAt: avatar.updatedAt,
     }));
   }
 
-  // ========================================
   // Méthodes utilitaires privées
-  // ========================================
-
   private randomChoice<T>(array: T[]): T {
     return array[Math.floor(Math.random() * array.length)];
   }

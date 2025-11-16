@@ -18,5 +18,5 @@ export class VerifyResetCodeDto {
   @IsNotEmpty({ message: 'Le code est requis' })
   @Length(6, 6, { message: 'Le code doit contenir 6 chiffres' })
   @Matches(/^[0-9]+$/, { message: 'Le code doit contenir uniquement des chiffres' })
-  code: string;
+  otp: string;
 }

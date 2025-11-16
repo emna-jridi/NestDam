@@ -10,18 +10,22 @@ import { UsersService } from 'src/users/users.service';
 import { VerifyOtpDto } from './dto/verify-otp.dto';
 import { ResendOtpDto } from './dto/resend-otp.dto';
 import { VerifyResetCodeDto } from './dto/verify-reset-code.dto';
+import { GoogleService } from 'src/google/google.service';
+import { GoogleLoginDto } from './dto/google-login.dto';
 @ApiTags('auth')
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly authService: AuthService, 
-      private usersService: UsersService
+  constructor(private readonly authService: AuthService,
+    private usersService: UsersService,
+    private readonly googleAuthService: GoogleService,
 
-  ) {}
 
-   @Post('register')
-async register(@Body() createUserDto: CreateUserDto) {
-  return this.authService.register(createUserDto);
-}
+  ) { }
+
+  @Post('register')
+  async register(@Body() createUserDto: CreateUserDto) {
+    return this.authService.register(createUserDto);
+  }
   @Post('login')
   @ApiOperation({ summary: 'Login ' })
   login(@Body() loginDto: LoginDto) {
@@ -38,34 +42,44 @@ async register(@Body() createUserDto: CreateUserDto) {
 
 
 
-// auth.controller.ts
-@Post('request-password-reset')
-@ApiOperation({ summary: 'Demander un code de réinitialisation de mot de passe' })
-requestPasswordReset(@Body() requestPasswordResetDto: ForgotPasswordDto) {
-  return this.authService.requestPasswordReset(requestPasswordResetDto);
-}
+  // auth.controller.ts
+  @Post('request-password-reset')
+  @ApiOperation({ summary: 'Demander un code de réinitialisation de mot de passe' })
+  requestPasswordReset(@Body() requestPasswordResetDto: ForgotPasswordDto) {
+    return this.authService.requestPasswordReset(requestPasswordResetDto);
+  }
 
-@Post('verify-reset-code')
-@ApiOperation({ summary: 'Vérifier le code de réinitialisation' })
-verifyResetCode(@Body() verifyResetCodeDto: VerifyResetCodeDto) {
-  return this.authService.verifyResetCode(verifyResetCodeDto);
-}
+  @Post('verify-reset-code')
+  @ApiOperation({ summary: 'Vérifier le code de réinitialisation' })
+  verifyResetCode(@Body() verifyResetCodeDto: VerifyResetCodeDto) {
+    return this.authService.verifyResetCode(verifyResetCodeDto);
+  }
 
-@Post('reset-password')
-@ApiOperation({ summary: 'Réinitialiser le mot de passe' })
-resetPassword(@Body() resetPasswordDto: ResetPasswordDto) {
-  return this.authService.resetPassword(resetPasswordDto);
-}
+  @Post('reset-password')
+  @ApiOperation({ summary: 'Réinitialiser le mot de passe' })
+  resetPassword(@Body() resetPasswordDto: ResetPasswordDto) {
+    return this.authService.resetPassword(resetPasswordDto);
+  }
 
-
+  // OTP / email verification
+  @Post('verify-email')  // ✅ fixed endpoint
+  async verifyEmail(@Body() dto: VerifyOtpDto) {
+    return this.usersService.verifyOtp(dto); // Reuse verifyOtp logic
+  }
   @Post('verify-otp')
   async verifyOtp(@Body() dto: VerifyOtpDto) {
     return this.usersService.verifyOtp(dto);
   }
-   @Post('resend-otp')
+  @Post('resend-otp')
   @ApiOperation({ summary: 'Renvoyer un code OTP' })
-
   resendOtp(@Body() resendOtpDto: ResendOtpDto) {
     return this.usersService.resendOtp(resendOtpDto);
   }
+
+  @Post('google')
+  async googleLogin(@Body() googledto :GoogleLoginDto ) {
+    return this.googleAuthService.loginWithGoogle(googledto);
+  }
+  
+
 }

@@ -18,19 +18,22 @@ import { AnalyzeInstalledAppsDto } from './dto/installed-apps.dto';
 import { SearchAppDto } from '../app-registry/dto/search-query.dto';
 import { AppRegistryService } from '../app-registry/app-registry.service';
 import * as fs from 'fs';
+import { ExodusService } from 'src/external-apis/exodus.service';
 
 @Controller('api/v1/scan')
 export class ScanController {
   constructor(
     private readonly scanService: ScanService,
     private readonly appRegistryService: AppRegistryService,
+    private readonly exodusService: ExodusService,
+
   ) { }
 
   // ⭐ NOUVEAU : Analyser les apps installées depuis le mobile
   @Post('installed')
   async scanInstalledApps(@Body() dto: AnalyzeInstalledAppsDto) {
     try {
-      return await this.scanService.analyzeInstalledApps(dto);
+      return await this.scanService.analyzeInstalledApps( dto.userHash, dto.apps);
     } catch (error) {
       throw new HttpException(
         'Failed to analyze installed apps',
@@ -40,50 +43,50 @@ export class ScanController {
   }
 
   // ⭐ NOUVEAU : Rechercher la sécurité d'une app
-  @Get('search')
-  async searchAppSecurity(@Query() query: SearchAppDto) {
-    try {
-      if (query.query.includes('.')) {
-        // C'est un package name
-        return await this.scanService.searchAppSecurity(query.query);
-      } else {
-        // C'est un nom d'app - rechercher d'abord
-        const apps = await this.appRegistryService.searchApps(query.query, query.limit);
-        return {
-          results: apps.map(app => ({
-            packageName: app.packageName,
-            name: app.name,
-            developer: app.developer,
-            category: app.category,
-            iconUrl: app.iconUrl,
-            privacyScore: app.privacyScore,
-            trackers: {
-              total: app.trackers.length,
-              list: app.trackers, // ou [] si tu n’as pas les détails
-            }
-          })),
-        };
-      }
-    } catch (error) {
-      throw new HttpException(
-        'App not found or search failed',
-        HttpStatus.NOT_FOUND,
-      );
-    }
-  }
+  /* @Get('search')
+   async searchAppSecurity(@Query() query: SearchAppDto) {
+     try {
+       if (query.query.includes('.')) {
+         // C'est un package name
+         return await this.scanService.searchAppSecurity(query.query);
+       } else {
+         // C'est un nom d'app - rechercher d'abord
+         const apps = await this.appRegistryService.searchApps(query.query, query.limit);
+         return {
+           results: apps.map(app => ({
+             packageName: app.packageName,
+             name: app.name,
+             developer: app.developer,
+             category: app.category,
+             iconUrl: app.iconUrl,
+             privacyScore: app.privacyScore,
+             trackers: {
+               total: app.trackers.length,
+               list: app.trackers, // ou [] si tu n’as pas les détails
+             }
+           })),
+         };
+       }
+     } catch (error) {
+       throw new HttpException(
+         'App not found or search failed',
+         HttpStatus.NOT_FOUND,
+       );
+     }
+   }*/
 
   // ⭐ NOUVEAU : Obtenir les détails complets d'une app
-  @Get('app/:packageName')
-  async getAppDetails(@Param('packageName') packageName: string) {
-    try {
-      return await this.scanService.searchAppSecurity(packageName);
-    } catch (error) {
-      throw new HttpException(
-        `App ${packageName} not found`,
-        HttpStatus.NOT_FOUND,
-      );
-    }
-  }
+  // @Get('app/:packageName')
+  // async getAppDetails(@Param('packageName') packageName: string) {
+  //   try {
+  //     return await this.scanService.searchAppSecurity(packageName);
+  //   } catch (error) {
+  //     throw new HttpException(
+  //       `App ${packageName} not found`,
+  //       HttpStatus.NOT_FOUND,
+  //     );
+  //   }
+  // }
 
   // Endpoint existant : Upload APK
   @Post('apk')
@@ -139,24 +142,24 @@ export class ScanController {
   }
 
   // ⭐ NOUVEAU : Comparer plusieurs apps
-  @Post('compare')
-  async compareApps(@Body() body: { packageNames: string[] }) {
-    try {
-      const results = await Promise.all(
-        body.packageNames.map(pkg => this.scanService.searchAppSecurity(pkg))
-      );
+  // @Post('compare')
+  // async compareApps(@Body() body: { packageNames: string[] }) {
+  //   try {
+  //     const results = await Promise.all(
+  //       body.packageNames.map(pkg => this.scanService.searchAppSecurity(pkg))
+  //     );
 
-      return {
-        apps: results,
-        comparison: this.generateComparison(results),
-      };
-    } catch (error) {
-      throw new HttpException(
-        'Comparison failed',
-        HttpStatus.INTERNAL_SERVER_ERROR,
-      );
-    }
-  }
+  //     return {
+  //       apps: results,
+  //       comparison: this.generateComparison(results),
+  //     };
+  //   } catch (error) {
+  //     throw new HttpException(
+  //       'Comparison failed',
+  //       HttpStatus.INTERNAL_SERVER_ERROR,
+  //     );
+  //   }
+  // }
 
   private generateComparison(apps: any[]) {
     const sorted = [...apps].sort((a, b) => b.privacyScore - a.privacyScore);
@@ -173,5 +176,25 @@ export class ScanController {
         dangerousPermissions: app.permissions.dangerous.length,
       })),
     };
+  }
+  @Post('admin/add-package-mapping')
+  async addPackageMapping(
+    @Body() dto: { packageName: string; trackers: string[] },
+  ) {
+    this.exodusService.addPackageMapping(dto.packageName, dto.trackers);
+
+    return {
+      message: 'Package mapping added successfully',
+      packageName: dto.packageName,
+      trackers: dto.trackers,
+    };
+  }
+
+  /**
+   * ✅ NOUVEAU : Obtenir les stats du service Exodus
+   */
+  @Get('admin/exodus-stats')
+  async getExodusStats() {
+    return this.exodusService.getStats();
   }
 }

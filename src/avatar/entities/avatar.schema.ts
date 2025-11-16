@@ -30,9 +30,6 @@ export class Avatar  {
   @Prop({ required: true })
   localPath: string; // Chemin local : /uploads/avatars/xxx.svg
 
-  @Prop({ required: true })
-  publicUrl: string; // URL publique : http://localhost:3000/uploads/avatars/xxx.svg
-
   @Prop({ default: Date.now })
   createdAt: Date;
 

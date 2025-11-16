@@ -8,6 +8,7 @@ import { Tracker, TrackerSchema } from './schemas/tracker.schema';
 import { Permission, PermissionSchema } from './schemas/permission.schema';
 import { ExternalApisModule } from '../external-apis/external-apis.module';
 import { AnalysisModule } from '../analysis/analysis.module';
+import { TrackerService } from './tracker.service';
 
 @Module({
   imports: [
@@ -20,7 +21,10 @@ import { AnalysisModule } from '../analysis/analysis.module';
     AnalysisModule,
   ],
   controllers: [AppRegistryController],
-  providers: [AppRegistryService],
-  exports: [AppRegistryService],
+  providers: [AppRegistryService,
+        TrackerService,
+
+  ],
+  exports: [AppRegistryService, TrackerService],
 })
 export class AppRegistryModule {}

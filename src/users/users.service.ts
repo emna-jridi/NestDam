@@ -27,44 +27,56 @@ export class UsersService {
     const num = crypto.randomInt(0, max).toString().padStart(length, '0');
     return num;
   }
-  async create(createUserDto: CreateUserDto, role: string = 'user') {
-    const exists = await this.userModel.findOne({ email: createUserDto.email });
-    if (exists) {
-      throw new ConflictException('Email already exists');
-    }
-
-    const hashedPassword = await bcrypt.hash(createUserDto.password, 10);
-    const userHash = this.generateUserHash(createUserDto.email);
-
-    const otp = this.generateNumericOtp(6);
-    const otpHash = await bcrypt.hash(otp, 10);
-    const otpExpires = addMinutes(new Date(), 10); // 10 minutes validity
-    const user = new this.userModel({
-      ...createUserDto,
-      password: hashedPassword,
-      role: 'user',
-      otpHash: otpHash,
-      otpExpires,
-      isVerified: false,
-
-    });
-
-    await user.save();
-    await this.mailService.sendOtpEmail(user.email, user.name, otp);
-    try {
-      const avatarResult = await this.avatarService.generateRandom(userHash);
-
-      // 6. Mettre à jour l'utilisateur avec l'avatar
-      user.avatarUrl = avatarResult.avatar.url;
-      await user.save();
-
-      console.log(`✅ Avatar créé pour l'utilisateur ${user.email}`);
-    } catch (error) {
-      console.error('⚠️ Erreur lors de la création de l\'avatar:', error.message);
-      // On continue même si l'avatar échoue
-    }
-    return this.sanitizeUser(user);
+async create(createUserDto: CreateUserDto, role: string = 'user') {
+  const exists = await this.userModel.findOne({ email: createUserDto.email });
+  if (exists) {
+    throw new ConflictException('Email already exists');
   }
+
+  const hashedPassword = await bcrypt.hash(createUserDto.password, 10);
+  const userHash = this.generateUserHash(createUserDto.email);
+
+  const otp = this.generateNumericOtp(6);
+  const otpHash = await bcrypt.hash(otp, 10);
+  const otpExpires = addMinutes(new Date(), 10);
+
+  const user = new this.userModel({
+    ...createUserDto,
+    password: hashedPassword,
+    role: 'user',
+    userHash,
+    otpHash: otpHash,
+    otpExpires,
+    isVerified: false,
+  });
+
+  await user.save();
+  await this.mailService.sendOtpEmail(user.email, user.name, otp);
+
+  // Générer l'avatar
+  try {
+    console.log(`🎨 Génération de l'avatar pour userHash: ${userHash}`);
+    
+    const avatarResult = await this.avatarService.generateRandom(userHash);
+
+    // ✅ Stocker uniquement le nom du fichier
+    user.avatarFileName = avatarResult.avatar.fileName;
+    await user.save();
+
+    console.log(`✅ Avatar créé: ${avatarResult.avatar.fileName}`);
+  } catch (error) {
+    console.error('⚠️ Erreur lors de la création de l\'avatar:', error.message);
+  }
+
+  return this.sanitizeUser(user);
+}
+
+
+private generateUserHash(email: string): string {
+  const timestamp = Date.now();
+  const random = Math.random().toString(36).substring(2, 15);
+  return `${email.split('@')[0]}-${timestamp}-${random}`;
+}
 
   async findAll() {
     const users = await this.userModel.find().exec();
@@ -106,56 +118,56 @@ export class UsersService {
     return this.sanitizeUser(user);
   }
   async updateAvatar(userId: string, avatarConfig: any) {
-    const user = await this.findOne(userId);
+  const user = await this.findOne(userId);
 
-    if (!user.userHash) {
-      throw new NotFoundException('User hash not found');
-    }
-
-    try {
-      // Mettre à jour l'avatar via le service Avatar
-      const avatarResult = await this.avatarService.update(
-        user.userHash,
-        avatarConfig
-      );
-
-      // Mettre à jour l'URL de l'avatar dans l'utilisateur
-      user.avatarUrl = avatarResult.avatar.url;
-      await user.save();
-
-      console.log(` Avatar mis à jour pour ${user.email}`);
-
-      return this.sanitizeUser(user);
-    } catch (error) {
-      console.error(' Erreur mise à jour avatar:', error.message);
-      throw error;
-    }
+  if (!user.userHash) {
+    throw new NotFoundException('User hash not found');
   }
 
+  try {
+    // Mettre à jour l'avatar via le service Avatar
+    const avatarResult = await this.avatarService.update(
+      user.userHash,
+      avatarConfig
+    );
+
+    // ✅ Mettre à jour uniquement le nom du fichier (pas l'URL)
+    user.avatarFileName = avatarResult.avatar.fileName;
+    await user.save();
+
+    console.log(`✅ Avatar mis à jour pour ${user.email}: ${avatarResult.avatar.fileName}`);
+
+    return this.sanitizeUser(user);
+  } catch (error) {
+    console.error('❌ Erreur mise à jour avatar:', error.message);
+    throw error;
+  }
+}
 
   async regenerateAvatar(userId: string) {
-    const user = await this.findOne(userId);
+  const user = await this.findOne(userId);
 
-    if (!user.userHash) {
-      throw new NotFoundException('User hash not found');
-    }
-
-    try {
-      // Générer un nouvel avatar aléatoire
-      const avatarResult = await this.avatarService.generateRandom(user.userHash);
-
-      // Mettre à jour l'URL
-      user.avatarUrl = avatarResult.avatar.url;
-      await user.save();
-
-      console.log(`✅ Nouvel avatar généré pour ${user.email}`);
-
-      return this.sanitizeUser(user);
-    } catch (error) {
-      console.error('❌ Erreur régénération avatar:', error.message);
-      throw error;
-    }
+  if (!user.userHash) {
+    throw new NotFoundException('User hash not found');
   }
+
+  try {
+    // Générer un nouvel avatar aléatoire
+    const avatarResult = await this.avatarService.generateRandom(user.userHash);
+
+    // ✅ Mettre à jour uniquement le nom du fichier (pas l'URL)
+    user.avatarFileName = avatarResult.avatar.fileName;
+    await user.save();
+
+    console.log(`✅ Nouvel avatar généré pour ${user.email}: ${avatarResult.avatar.fileName}`);
+
+    return this.sanitizeUser(user);
+  } catch (error) {
+    console.error('❌ Erreur régénération avatar:', error.message);
+    throw error;
+  }
+}
+
   async remove(id: string) {
     const user = await this.findOne(id);
     if (user.userHash) {
@@ -195,7 +207,8 @@ export class UsersService {
     });
   }
   async verifyOtp(verifyOtpDto: VerifyOtpDto) {
-    const user = await this.findByEmail(verifyOtpDto.identifier);
+    if (!verifyOtpDto.email) throw new BadRequestException('L\'identifiant est requis');
+    const user = await this.findByEmail(verifyOtpDto.email);
     if (!user) throw new NotFoundException('User not found');
 
     if (user.isVerified) return { message: 'Already verified' };
@@ -215,7 +228,7 @@ export class UsersService {
       throw new BadRequestException('Too many attempts. Request a new OTP.');
     }
 
-    const isMatch = await bcrypt.compare(verifyOtpDto.code, user.otpHash);
+    const isMatch = await bcrypt.compare(verifyOtpDto.otp, user.otpHash);
     if (!isMatch) {
       await user.save();
       throw new BadRequestException('Invalid OTP code.');
@@ -248,17 +261,28 @@ export class UsersService {
 
     return { message: 'OTP resent' };
   }
-  private generateUserHash(email: string): string {
-    const timestamp = Date.now();
-    const random = uuidv4().substring(0, 8);
-    const hash = `${email.split('@')[0]}-${timestamp}-${random}`;
-    return hash.toLowerCase().replace(/[^a-z0-9-]/g, '');
-  }
+
   // Supprime les champs sensibles (mot de passe, token) avant de renvoyer l'utilisateur  
-  private sanitizeUser(user: any) {
+  sanitizeUser(user: any) {
     const obj = user.toObject();
     delete obj.password;
     delete obj.refreshToken;
     return obj;
   }
+  async createGoogleUser(data: { email: string; name: string; avatarUrl?: string; provider: string }) {
+    const user = new this.userModel({
+      email: data.email,
+      name: data.name,
+      password: null, // no password for Google login
+      role: 'user',
+      avatarUrl: data.avatarUrl || null,
+      isVerified: true,
+      provider: 'google'
+      
+    });
+
+    await user.save();
+    return this.sanitizeUser(user);
+  }
+
 }

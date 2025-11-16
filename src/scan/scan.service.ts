@@ -7,6 +7,11 @@ import { MobsfService } from '../external-apis/mobsf.service';
 import { AppRegistryService } from '../app-registry/app-registry.service';
 import { RiskCalculatorService } from '../analysis/risk-calculator.service';
 import { AnalyzeInstalledAppsDto, InstalledAppDto } from './dto/installed-apps.dto';
+import { ExodusPrivacyService } from '../external-apis/exodus-privacy.service';
+import { report } from 'process';
+import { async } from 'rxjs';
+import { TrackerDetectorService } from 'src/analysis/tracker-detector.service';
+import { Tracker } from 'src/app-registry/schemas/tracker.schema';
 
 @Injectable()
 export class ScanService {
@@ -14,62 +19,108 @@ export class ScanService {
 
   constructor(
     @InjectModel(Scan.name) private scanModel: Model<Scan>,
+    @InjectModel(Tracker.name) private trackerModel: Model<Tracker>,
+    private trackerDetector: TrackerDetectorService,
+
     private mobsfService: MobsfService,
+    private exodusService: ExodusPrivacyService,
     private appRegistryService: AppRegistryService,
     private riskCalculator: RiskCalculatorService,
   ) { }
 
-  // ⭐ NOUVEAU : Analyser les apps installées depuis le mobile
-  async analyzeInstalledApps(dto: AnalyzeInstalledAppsDto) {
-    this.logger.log(`Analyzing ${dto.apps.length} installed apps`);
+  // -------------------------------------------------------------
+  // ⭐ MAIN ENTRY : ANALYZE INSTALLED APPS FROM MOBILE
+  // -------------------------------------------------------------
+  async analyzeInstalledApps(userHash: string, apps: InstalledAppDto[]) {
 
-    const results = await Promise.all(
-      dto.apps.map(app => this.analyzeInstalledApp(app))
-    );
+    // Charger tous les trackers de MongoDB
+    const trackers = await this.trackerModel.find().exec();
 
-    // Sauvegarder le scan global
-    const scan = new this.scanModel({
-      type: 'batch_installed',
-      userHash: dto.userHash,
-      report: {
-        totalApps: dto.apps.length,
-        results,
-        summary: this.generateSummary(results),
-      },
+    const results = apps.map(app => {
+      const detectedTrackers = this.trackerDetector.detectTrackers(app, trackers);
+
+      return {
+        packageName: app.packageName,
+        name: app.name,
+        permissions: app.permissions,
+        trackers: detectedTrackers,
+        totalTrackers: detectedTrackers.length,
+      };
     });
 
-    await scan.save();
-
     return {
-      scanId: scan._id,
-      totalApps: dto.apps.length,
+      scanId: crypto.randomUUID(),
+      userHash,
+      totalApps: apps.length,
       results,
-      summary: this.generateSummary(results),
+      summary: {
+        totalTrackers: results.reduce((acc, r) => acc + r.totalTrackers, 0)
+      }
     };
   }
 
-  // Analyser une app installée individuellement
+
+  // -------------------------------------------------------------
+  // ⭐ Analyze ONE single installed app - ✅ CORRIGÉ
+  // -------------------------------------------------------------
   private async analyzeInstalledApp(appDto: InstalledAppDto) {
     try {
-      // 1. Récupérer/créer l'entrée dans la base
+      // 1. Load app from registry (exists or create)
       const app = await this.appRegistryService.getOrCreateApp(appDto.packageName);
 
-      // 2. Calculer le score avec les données du mobile + base
+      // ✅ 2. Fusionner les trackers provenant de plusieurs sources
+      // Sources: mobile (appDto.trackers), Exodus (exodusService), DB (app.trackers)
+      const mobileTrackers: string[] = appDto.trackers || [];
+      this.logger.debug(`Mobile trackers count: ${mobileTrackers.length} for ${appDto.packageName}`);
+
+      // Interroger Exodus en parallèle (même si mobile a fourni des trackers,
+      // on récupère cependant les données externes pour enrichir/compléter)
+      this.logger.debug(`Querying Exodus for ${appDto.packageName}...`);
+      const exodusTrackers: string[] = await this.exodusService.getTrackers(appDto.packageName);
+      this.logger.debug(`Exodus trackers count: ${exodusTrackers.length} for ${appDto.packageName}`);
+
+      const dbTrackers: string[] = app.trackers || [];
+      this.logger.debug(`DB trackers count: ${dbTrackers.length} for ${app.packageName}`);
+
+      // Fusionner et dédupliquer (préserver l'ordre: DB -> Exodus -> Mobile)
+      const mergedSet = new Set<string>([...dbTrackers, ...exodusTrackers, ...mobileTrackers]);
+      const finalTrackers = Array.from(mergedSet);
+
+      // Sauvegarder les trackers fusionnés dans l'objet app (pour usage/futurs scans)
+      app.trackers = finalTrackers;
+
+      // Enregistrer une trace des sources pour audit/debug (champ libre, schema peut l'ignorer)
+      try {
+        (app as any).trackerSources = {
+          mobileCount: mobileTrackers.length,
+          exodusCount: exodusTrackers.length,
+          dbCount: dbTrackers.length,
+          mergedCount: finalTrackers.length,
+          lastFetched: new Date(),
+        };
+      } catch (e) {
+        this.logger.debug('Could not set trackerSources on app object', e?.message || e);
+      }
+
+      this.logger.log(`Final trackers count: ${finalTrackers.length} for ${appDto.packageName}`);
+
+      // 3. Calculate risk
       const riskResult = this.riskCalculator.calculateRiskScore({
         permissions: appDto.permissions,
-        trackers: app.trackers || [],
-        isDebuggable: appDto.isDebuggable || false,
+        trackers: finalTrackers,
+        isDebuggable: appDto.isDebuggable || app.isDebuggable || false,
         communityScore: app.communityScore,
       });
 
-      // 3. Mettre à jour l'app si nécessaire
-      if (appDto.isDebuggable !== undefined) {
-        app.isDebuggable = appDto.isDebuggable;
-        app.scanCount += 1;
-        app.lastScanned = new Date();
-        await app.save();
-      }
+      // 4. Update app metadata
+      app.isDebuggable = appDto.isDebuggable ?? app.isDebuggable;
+      app.scanCount += 1;
+      app.lastScanned = new Date();
+      app.privacyScore = riskResult.score; // ✅ Mettre à jour le score
 
+      await app.save();
+
+      // 5. Final Response
       return {
         packageName: appDto.packageName,
         name: app.name,
@@ -78,107 +129,61 @@ export class ScanService {
         riskLevel: this.riskCalculator.getRiskLevel(riskResult.score),
         alerts: riskResult.alerts,
         breakdown: riskResult.breakdown,
-        trackers: app.trackers,
+        trackers: finalTrackers, // ✅ Maintenant rempli !
         permissions: {
           dangerous: riskResult.breakdown['permissions']?.list || [],
           total: appDto.permissions.length,
         },
       };
     } catch (error) {
-      this.logger.error(`Failed to analyze ${appDto.packageName}`, error);
+      this.logger.error(`Failed to analyze ${appDto.packageName}`, error.stack);
       return {
         packageName: appDto.packageName,
+        name: appDto.name || 'Unknown',
+        score: 0,
+        riskLevel: 'UNKNOWN',
         error: 'Analysis failed',
+        trackers: [],
+        permissions: { dangerous: [], total: 0 },
       };
     }
   }
 
+  // -------------------------------------------------------------
+  // ⭐ SUMMARY GENERATOR
+  // -------------------------------------------------------------
   private generateSummary(results: any[]) {
-    const validResults = results.filter(r => !r.error);
+    const valid = results.filter(r => !r.error);
 
-    const critical = validResults.filter(r => r.riskLevel === 'CRITICAL').length;
-    const high = validResults.filter(r => r.riskLevel === 'HIGH').length;
-    const medium = validResults.filter(r => r.riskLevel === 'MEDIUM').length;
-    const low = validResults.filter(r => r.riskLevel === 'LOW').length;
+    if (valid.length === 0) {
+      return {
+        avgScore: 0,
+        riskDistribution: { critical: 0, high: 0, medium: 0, low: 0 },
+        totalAlerts: 0,
+        mostDangerousApps: [],
+      };
+    }
 
-    const avgScore = validResults.reduce((sum, r) => sum + r.score, 0) / validResults.length;
+    const avgScore = valid.reduce((sum, r) => sum + r.score, 0) / valid.length;
 
     return {
       avgScore: Math.round(avgScore),
-      riskDistribution: { critical, high, medium, low },
-      totalAlerts: validResults.reduce((sum, r) => sum + r.alerts.length, 0),
-      mostDangerousApps: validResults
+      riskDistribution: {
+        critical: valid.filter(r => r.riskLevel === 'CRITICAL').length,
+        high: valid.filter(r => r.riskLevel === 'HIGH').length,
+        medium: valid.filter(r => r.riskLevel === 'MEDIUM').length,
+        low: valid.filter(r => r.riskLevel === 'LOW').length,
+      },
+      totalAlerts: valid.reduce((sum, r) => sum + r.alerts.length, 0),
+      mostDangerousApps: valid
         .sort((a, b) => a.score - b.score)
         .slice(0, 5)
         .map(r => ({ packageName: r.packageName, name: r.name, score: r.score })),
     };
   }
-  // ⭐ NOUVEAU : Rechercher la sécurité d'une app (avant installation)
-  async searchAppSecurity(packageName: string) {
-    this.logger.log(`Searching security info for: ${packageName}`);
 
-    try {
-      // Récupérer/créer l'app dans la base
-      const app = await this.appRegistryService.getOrCreateApp(packageName);
-
-      // Calculer les statistiques
-      const stats = await this.getAppStats(packageName);
-
-      // Retourner le rapport complet
-      return {
-        packageName: app.packageName,
-        name: app.name,
-        developer: app.developer,
-        category: app.category,
-        version: app.version,
-        iconUrl: app.iconUrl,
-        description: app.description,
-
-        // Scores
-        privacyScore: app.privacyScore,
-        riskLevel: this.riskCalculator.getRiskLevel(app.privacyScore),
-        riskColor: this.riskCalculator.getRiskColor(app.privacyScore),
-        communityScore: app.communityScore,
-
-        // Détails de sécurité
-        permissions: {
-          total: app.permissions.length,
-          dangerous: this.getDangerousPermissions(app.permissions),
-          list: app.permissions,
-        },
-
-        trackers: {
-          total: app.trackers.length,
-          list: app.trackers,
-        },
-
-        flags: {
-          isDebuggable: app.isDebuggable,
-          hasUnknownTrackers: this.hasUnknownTrackers(app.trackers),
-        },
-
-        // Données tierces
-        playStoreData: app.playStoreData,
-        exodusData: app.exodusData,
-
-        // Stats
-        stats,
-
-        // Recommandations
-        recommendations: this.generateRecommendations(app),
-
-        // Alternatives
-        alternatives: await this.findAlternatives(app),
-      };
-
-    } catch (error) {
-      this.logger.error(`Failed to search app security: ${packageName}`, error);
-      throw error;
-    }
-  }
-
-  private getDangerousPermissions(permissions: string[]) {
-    const dangerousList = [
+  private getDangerousPermissions(list: string[]) {
+    const dangerous = [
       'android.permission.READ_SMS',
       'android.permission.SEND_SMS',
       'android.permission.READ_CONTACTS',
@@ -191,11 +196,10 @@ export class ScanService {
       'android.permission.WRITE_CALL_LOG',
     ];
 
-    return permissions.filter(p => dangerousList.includes(p));
+    return list.filter(p => dangerous.includes(p));
   }
-
-  private hasUnknownTrackers(trackers: string[]): boolean {
-    // À implémenter : vérifier contre une base de trackers connus
+  private hasUnknownTrackers(trackers: string[]) {
+    // Later: compare to known trackers list
     return false;
   }
 
@@ -212,75 +216,37 @@ export class ScanService {
     };
   }
 
-  private calculateAvgScore(scans: Scan[], packageName: string): number {
+
+  private calculateAvgScore(scans: Scan[], packageName: string) {
     const scores = scans
-      .flatMap(scan => scan.report?.results || [])
-      .filter(r => r.packageName === packageName && r.score)
+      .flatMap(s => s.report?.results || [])
+      .filter(r => r.packageName === packageName && r.score !== undefined)
       .map(r => r.score);
 
-    if (scores.length === 0){ return 0;}
+    if (!scores.length) return 0;
 
-    const sum = scores.reduce((acc, score) => acc + score, 0);
-    return sum / scores.length;
+    return scores.reduce((a, b) => a + b, 0) / scores.length;
   }
 
-  private generateRecommendations(app: any): string[] {
-    const recommendations: string[] = [];
+  private generateRecommendations(app: any) {
+    const rec: string[] = [];
 
     if (app.privacyScore < 30) {
-      recommendations.push('🔴 Désinstaller cette application - niveau de risque critique');
-      recommendations.push('Rechercher une alternative plus sûre');
-    } else if (app.privacyScore < 50) {
-      recommendations.push('⚠️ Utiliser avec précaution');
-      recommendations.push('Révoquer les permissions sensibles non essentielles');
+      rec.push('🔴 RISQUE CRITIQUE - désinstaller cette application');
     }
 
-    if (app.isDebuggable) {
-      recommendations.push('Application en mode debug - vulnérable aux attaques');
+    if (app.trackers?.length > 5) {
+      rec.push(`⚠️ Trop de trackers (${app.trackers.length})`);
     }
 
-    if (app.trackers.length > 5) {
-      recommendations.push(`Contient ${app.trackers.length} trackers - considérer une alternative`);
+    if (this.getDangerousPermissions(app.permissions).length > 3) {
+      rec.push('⚠️ Permissions très sensibles détectées');
     }
 
-    const dangerousPerms = this.getDangerousPermissions(app.permissions);
-    if (dangerousPerms.length > 3) {
-      recommendations.push(`${dangerousPerms.length} permissions dangereuses - vérifier la nécessité`);
-    }
-
-    if (app.communityScore && app.communityScore < 2.5) {
-      recommendations.push('Mauvaise réputation communautaire');
-    }
-
-    if (recommendations.length === 0) {
-      recommendations.push('✅ Application relativement sûre');
-      recommendations.push('Toujours surveiller les mises à jour');
-    }
-
-    return recommendations;
+    if (rec.length === 0) rec.push('✅ Application relativement sûre');
+    return rec;
   }
 
-  private async findAlternatives(app: any): Promise<any[]> {
-    if (!app.category) return [];
-
-    try {
-      const alternatives = await this.appRegistryService.searchApps(app.category, 5);
-
-      return alternatives
-        .filter(alt => alt.packageName !== app.packageName)
-        .filter(alt => alt.privacyScore > app.privacyScore)
-        .slice(0, 3)
-        .map(alt => ({
-          packageName: alt.packageName,
-          name: alt.name,
-          privacyScore: alt.privacyScore,
-          improvement: alt.privacyScore - app.privacyScore,
-        }));
-    } catch (error) {
-      this.logger.error('Failed to find alternatives', error);
-      return [];
-    }
-  }
 
   // Méthode existante uploadApk (améliorée)
   async uploadApk(filePath: string) {
@@ -408,5 +374,21 @@ export class ScanService {
       alerts: riskResult.alerts,
       breakdown: riskResult.breakdown,
     };
+  }
+  private async findAlternatives(app: any) {
+    if (!app.category) return [];
+
+    const candidates = await this.appRegistryService.searchApps(app.category, 5);
+
+    return candidates
+      .filter(x => x.packageName !== app.packageName)
+      .filter(x => x.privacyScore > app.privacyScore)
+      .slice(0, 3)
+      .map(x => ({
+        packageName: x.packageName,
+        name: x.name,
+        privacyScore: x.privacyScore,
+        improvement: x.privacyScore - app.privacyScore,
+      }));
   }
 }
