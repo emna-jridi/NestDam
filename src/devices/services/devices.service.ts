@@ -32,18 +32,33 @@ export class DevicesService {
       );
     }
 
-    // Check if device is already registered
+    // Log the registration attempt for debugging
+    this.logger.log(
+      `Registration attempt - deviceIdentifier: ${dto.deviceIdentifier}, platform: ${dto.platform}, userId: ${userId}`,
+    );
+
+    // Check if device is already registered for this user and platform
+    // A device is uniquely identified by deviceIdentifier + platform + userId
     const existingDevice = await this.deviceModel.findOne({
       deviceIdentifier: dto.deviceIdentifier,
+      platform: dto.platform,
+      userId: new Types.ObjectId(userId),
     });
 
     if (existingDevice) {
-      // Update last seen and ensure user association
+      this.logger.log(
+        `Found existing device: _id=${String(existingDevice._id)}, platform=${existingDevice.platform}, deviceIdentifier=${existingDevice.deviceIdentifier}`,
+      );
+    } else {
+      this.logger.log('No existing device found, creating new device');
+    }
+
+    if (existingDevice) {
+      // Update last seen and device info
       existingDevice.lastSeen = new Date();
-      if (existingDevice.userId.toString() !== userId) {
-        // Device was registered by another user, update ownership
-        existingDevice.userId = new Types.ObjectId(userId);
-      }
+      if (dto.osVersion) existingDevice.osVersion = dto.osVersion;
+      if (dto.deviceModel) existingDevice.deviceModel = dto.deviceModel;
+      if (dto.appVersion) existingDevice.appVersion = dto.appVersion;
       const updated = await existingDevice.save();
 
       // ensure user's devices array contains this device
@@ -92,14 +107,17 @@ export class DevicesService {
           'This may be due to an old database index. Run the migration script: npx ts-node scripts/fix-device-indexes.ts',
         );
         // Try to find the device again in case it was created between checks
+        // Check for deviceIdentifier + platform + userId combination
         const device = await this.deviceModel.findOne({
           deviceIdentifier: dto.deviceIdentifier,
+          platform: dto.platform,
+          userId: new Types.ObjectId(userId),
         });
         if (device) {
           device.lastSeen = new Date();
-          if (device.userId.toString() !== userId) {
-            device.userId = new Types.ObjectId(userId);
-          }
+          if (dto.osVersion) device.osVersion = dto.osVersion;
+          if (dto.deviceModel) device.deviceModel = dto.deviceModel;
+          if (dto.appVersion) device.appVersion = dto.appVersion;
           const updated = await device.save();
           await this.userModel.findByIdAndUpdate(userId, {
             $addToSet: { devices: updated._id },
@@ -245,5 +263,42 @@ export class DevicesService {
         lastRiskScore: device.lastRiskScore,
       })),
     };
+  }
+
+  async getDeviceByIdentifier(
+    deviceIdentifier: string,
+    userId: string,
+  ): Promise<Device> {
+    const device = await this.deviceModel.findOne({
+      deviceIdentifier: deviceIdentifier,
+      userId: new Types.ObjectId(userId),
+    });
+
+    if (!device) {
+      throw new NotFoundException(
+        `Device with identifier ${deviceIdentifier} not found for this user`,
+      );
+    }
+
+    return device;
+  }
+
+  async checkDeviceRegistration(
+    deviceIdentifier: string,
+    platform: string,
+    userId: string,
+  ): Promise<{ isRegistered: boolean; device?: Device }> {
+    // Check if device with this identifier and platform exists for this user
+    const device = await this.deviceModel.findOne({
+      deviceIdentifier: deviceIdentifier,
+      platform: platform,
+      userId: new Types.ObjectId(userId),
+    });
+
+    if (device) {
+      return { isRegistered: true, device };
+    }
+
+    return { isRegistered: false };
   }
 }

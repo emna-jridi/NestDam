@@ -5,7 +5,7 @@ export type DeviceDocument = HydratedDocument<Device>;
 
 @Schema({ timestamps: true })
 export class Device extends Document {
-  @Prop({ required: true, unique: true, index: true })
+  @Prop({ required: true, index: true })
   deviceIdentifier: string;
 
   @Prop({ required: true })
@@ -37,3 +37,10 @@ export class Device extends Document {
 }
 
 export const DeviceSchema = SchemaFactory.createForClass(Device);
+
+// Create compound unique index: deviceIdentifier + platform + userId
+// This allows the same deviceIdentifier on different platforms for the same user
+DeviceSchema.index(
+  { deviceIdentifier: 1, platform: 1, userId: 1 },
+  { unique: true, name: 'deviceIdentifier_platform_userId_unique' },
+);
