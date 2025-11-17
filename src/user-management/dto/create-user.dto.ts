@@ -1,6 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { IsEmail, IsNotEmpty, IsOptional, MinLength } from 'class-validator';
-import { RegisterDeviceDto } from '../../devices/dto/register-device.dto';
 
 export class CreateUserDto {
   @ApiProperty({ example: 'johndoe' })
@@ -20,7 +19,7 @@ export class CreateUserDto {
   @MinLength(6)
   password: string;
 
-  @ApiProperty({ example: '+1234567890' })
+  @ApiProperty({ example: '+1234567890', required: false })
   @IsOptional()
   @MinLength(11)
   phone?: string;
@@ -29,10 +28,7 @@ export class CreateUserDto {
   @IsOptional()
   avatar?: string;
 
-  @ApiProperty()
-  devices?: RegisterDeviceDto[];
-
-  @ApiProperty({ example: false, default: false })
+  @ApiProperty({ example: false, default: false, required: false })
   @IsOptional()
   isDeviceRegistered?: boolean;
 }
