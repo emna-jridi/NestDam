@@ -11,6 +11,13 @@ import {
   UploadedFile,
   HttpStatus,
   HttpException,
+  BadRequestException,
+  Delete,
+  Headers as HeadersDecorator,
+  HttpCode,
+  NotFoundException,
+  UseGuards,
+  Req,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ScanService } from './scan.service';
@@ -19,6 +26,9 @@ import { SearchAppDto } from '../app-registry/dto/search-query.dto';
 import { AppRegistryService } from '../app-registry/app-registry.service';
 import * as fs from 'fs';
 import { ExodusService } from 'src/external-apis/exodus.service';
+import { ComparScansDto } from './dto/compare-scans.dto';
+import { GetScansQueryDto } from './dto/get-scans.dto';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 
 @Controller('api/v1/scan')
 export class ScanController {
@@ -31,9 +41,12 @@ export class ScanController {
 
   // ⭐ NOUVEAU : Analyser les apps installées depuis le mobile
   @Post('installed')
-  async scanInstalledApps(@Body() dto: AnalyzeInstalledAppsDto) {
+  @UseGuards(JwtAuthGuard)
+  async scanInstalledApps(@Body() dto: AnalyzeInstalledAppsDto ){
+    const userHash = dto.userHash; 
+
     try {
-      return await this.scanService.analyzeInstalledApps( dto.userHash, dto.apps);
+      return await this.scanService.analyzeInstalledApps(userHash, dto.apps);
     } catch (error) {
       throw new HttpException(
         'Failed to analyze installed apps',
@@ -197,4 +210,151 @@ export class ScanController {
   async getExodusStats() {
     return this.exodusService.getStats();
   }
+  @Get('user/:userHash')
+  async getUserScans(
+    @Param('userHash') userHash: string,
+    @Query() query: GetScansQueryDto,
+    @HeadersDecorator('authorization') authHeader?: string,
+  ) {
+    try {
+      // ✅ Vérifier le token (optionnel)
+      if (authHeader) {
+        const token = authHeader.replace('Bearer ', '');
+        // Vous pouvez ajouter une vérification de token ici
+      }
+
+      const result = await this.scanService.getUserScans(userHash, query);
+
+      return {
+        success: true,
+        data: result,
+      };
+    } catch (error) {
+      throw new BadRequestException(error.message);
+    }
+  }
+
+  // -------------------------------------------------------------
+  // 🔍 GET SCAN BY ID
+  // -------------------------------------------------------------
+  @Get(':scanId')
+  async getScanById(@Param('scanId') scanId: string) {
+    try {
+      const scan = await this.scanService.getScanById(scanId);
+
+      return {
+        success: true,
+        data: scan,
+      };
+    } catch (error) {
+      throw new NotFoundException(error.message);
+    }
+  }
+
+  // -------------------------------------------------------------
+  // 📌 GET LATEST SCAN
+  // -------------------------------------------------------------
+  @Get('latest/:userHash')
+  async getLatestScan(@Param('userHash') userHash: string) {
+    try {
+      const scan = await this.scanService.getLatestScan(userHash);
+
+      if (!scan) {
+        return {
+          success: true,
+          data: null,
+          message: 'No scans found for this user',
+        };
+      }
+
+      return {
+        success: true,
+        data: scan,
+      };
+    } catch (error) {
+      throw new BadRequestException(error.message);
+    }
+  }
+
+  // -------------------------------------------------------------
+  // 🗑️ DELETE SCAN
+  // -------------------------------------------------------------
+  @Delete(':scanId')
+  @HttpCode(HttpStatus.OK)
+  async deleteScan(
+    @Param('scanId') scanId: string,
+    @Body('userHash') userHash: string,
+  ) {
+    try {
+      if (!userHash) {
+        throw new BadRequestException('userHash is required');
+      }
+
+      const result = await this.scanService.deleteScan(scanId, userHash);
+
+      return {
+        success: true,
+        data: result,
+      };
+    } catch (error) {
+      throw new BadRequestException(error.message);
+    }
+  }
+
+  // -------------------------------------------------------------
+  // 🔄 COMPARE TWO SCANS
+  // -------------------------------------------------------------
+  @Post('compare')
+  async compareScans(
+    @Body() compareDto: ComparScansDto,
+    @HeadersDecorator('x-user-hash') userHash?: string,
+  ) {
+    try {
+      if (!userHash) {
+        throw new BadRequestException('User hash required in header');
+      }
+
+      const result = await this.scanService.compareScans(
+        compareDto.scanId1,
+        compareDto.scanId2,
+        userHash,
+      );
+
+      return {
+        success: true,
+        data: result,
+      };
+    } catch (error) {
+      throw new BadRequestException(error.message);
+    }
+  }
+
+  // -------------------------------------------------------------
+  // 📊 GET USER STATISTICS
+  // -------------------------------------------------------------
+  @Get('stats/:userHash')
+  async getUserStatistics(@Param('userHash') userHash: string) {
+    try {
+      const stats = await this.scanService.getScanStatistics(userHash);
+
+      return {
+        success: true,
+        data: stats,
+      };
+    } catch (error) {
+      throw new BadRequestException(error.message);
+    }
+  }
+  @Get('user/:userHash')
+async getUserScanHistory(
+  @Param('userHash') userHash: string,
+  @Query() query: GetScansQueryDto
+) {
+   const result = await this.scanService.getUserScans(userHash, query);
+   return {
+      success: true,
+      data: result
+   };
+}
+
 }

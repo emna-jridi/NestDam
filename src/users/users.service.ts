@@ -29,11 +29,10 @@ export class UsersService {
   }
 async create(createUserDto: CreateUserDto, role: string = 'user') {
   const exists = await this.userModel.findOne({ email: createUserDto.email });
-  if (exists) {
-    throw new ConflictException('Email already exists');
-  }
+  if (exists) throw new ConflictException('Email already exists');
 
   const hashedPassword = await bcrypt.hash(createUserDto.password, 10);
+  
   const userHash = this.generateUserHash(createUserDto.email);
 
   const otp = this.generateNumericOtp(6);
@@ -43,29 +42,24 @@ async create(createUserDto: CreateUserDto, role: string = 'user') {
   const user = new this.userModel({
     ...createUserDto,
     password: hashedPassword,
-    role: 'user',
-    userHash,
-    otpHash: otpHash,
+    role,
+    userHash,               
+    otpHash,
     otpExpires,
     isVerified: false,
+    provider: 'local'
   });
 
   await user.save();
   await this.mailService.sendOtpEmail(user.email, user.name, otp);
 
-  // Générer l'avatar
+  // avatar
   try {
-    console.log(`🎨 Génération de l'avatar pour userHash: ${userHash}`);
-    
     const avatarResult = await this.avatarService.generateRandom(userHash);
-
-    // ✅ Stocker uniquement le nom du fichier
     user.avatarFileName = avatarResult.avatar.fileName;
     await user.save();
-
-    console.log(`✅ Avatar créé: ${avatarResult.avatar.fileName}`);
-  } catch (error) {
-    console.error('⚠️ Erreur lors de la création de l\'avatar:', error.message);
+  } catch (e) {
+    console.error('Avatar error:', e.message);
   }
 
   return this.sanitizeUser(user);
@@ -270,19 +264,23 @@ private generateUserHash(email: string): string {
     return obj;
   }
   async createGoogleUser(data: { email: string; name: string; avatarUrl?: string; provider: string }) {
-    const user = new this.userModel({
-      email: data.email,
-      name: data.name,
-      password: null, // no password for Google login
-      role: 'user',
-      avatarUrl: data.avatarUrl || null,
-      isVerified: true,
-      provider: 'google'
-      
-    });
 
-    await user.save();
-    return this.sanitizeUser(user);
-  }
+  const userHash = this.generateUserHash(data.email);
+
+  const user = new this.userModel({
+    email: data.email,
+    name: data.name,
+    password: null,
+    role: 'user',
+    avatarUrl: data.avatarUrl || null,
+    isVerified: true,
+    provider: 'google',
+    userHash      
+  });
+
+  await user.save();
+  return this.sanitizeUser(user);
+}
+
 
 }

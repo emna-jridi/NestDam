@@ -1,4 +1,3 @@
-
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
@@ -7,11 +6,12 @@ import { MobsfService } from '../external-apis/mobsf.service';
 import { AppRegistryService } from '../app-registry/app-registry.service';
 import { RiskCalculatorService } from '../analysis/risk-calculator.service';
 import { AnalyzeInstalledAppsDto, InstalledAppDto } from './dto/installed-apps.dto';
-import { ExodusPrivacyService } from '../external-apis/exodus-privacy.service';
-import { report } from 'process';
+import { ExodusService } from '../external-apis/exodus.service';
 import { async } from 'rxjs';
 import { TrackerDetectorService } from 'src/analysis/tracker-detector.service';
 import { Tracker } from 'src/app-registry/schemas/tracker.schema';
+import { ComparisonResultDto } from './dto/compare-scans.dto';
+import { GetScansQueryDto, GetScansResponseDto, SortOrder } from './dto/get-scans.dto';
 
 @Injectable()
 export class ScanService {
@@ -23,88 +23,76 @@ export class ScanService {
     private trackerDetector: TrackerDetectorService,
 
     private mobsfService: MobsfService,
-    private exodusService: ExodusPrivacyService,
+    private exodusService: ExodusService,
     private appRegistryService: AppRegistryService,
     private riskCalculator: RiskCalculatorService,
   ) { }
 
   // -------------------------------------------------------------
-  // ⭐ MAIN ENTRY : ANALYZE INSTALLED APPS FROM MOBILE
+  //  MAIN ENTRY : ANALYZE INSTALLED APPS FROM MOBILE - ✅ CORRIGÉ
   // -------------------------------------------------------------
   async analyzeInstalledApps(userHash: string, apps: InstalledAppDto[]) {
 
-    // Charger tous les trackers de MongoDB
-    const trackers = await this.trackerModel.find().exec();
+    try {
+      const allTrackers = await this.trackerModel.find().exec();
+      const results = await Promise.all(
+        apps.map(app => this.analyzeInstalledAppWithDetection(app, allTrackers))
+      );
 
-    const results = apps.map(app => {
-      const detectedTrackers = this.trackerDetector.detectTrackers(app, trackers);
+      const summary = this.generateSummary(results);
+
+      const scan = await this.scanModel.create({
+        type: 'batch_installed',
+        userHash,
+        totalApps: apps.length,
+        report: {
+          results,
+        },
+        summary,
+      });
 
       return {
-        packageName: app.packageName,
-        name: app.name,
-        permissions: app.permissions,
-        trackers: detectedTrackers,
-        totalTrackers: detectedTrackers.length,
+        scanId: scan.id.toString(),
+        userHash,
+        totalApps: apps.length,
+        results,
+        summary,
+        createdAt: scan.createdAt,
       };
-    });
 
-    return {
-      scanId: crypto.randomUUID(),
-      userHash,
-      totalApps: apps.length,
-      results,
-      summary: {
-        totalTrackers: results.reduce((acc, r) => acc + r.totalTrackers, 0)
-      }
-    };
+    } catch (error) {
+      throw new Error(`Failed to analyze installed apps: ${error.message}`);
+    }
   }
 
 
   // -------------------------------------------------------------
   // ⭐ Analyze ONE single installed app - ✅ CORRIGÉ
   // -------------------------------------------------------------
-  private async analyzeInstalledApp(appDto: InstalledAppDto) {
+  private async analyzeInstalledAppWithDetection(
+    appDto: InstalledAppDto,
+    allTrackers: Tracker[]
+  ) {
     try {
-      // 1. Load app from registry (exists or create)
       const app = await this.appRegistryService.getOrCreateApp(appDto.packageName);
 
-      // ✅ 2. Fusionner les trackers provenant de plusieurs sources
-      // Sources: mobile (appDto.trackers), Exodus (exodusService), DB (app.trackers)
       const mobileTrackers: string[] = appDto.trackers || [];
-      this.logger.debug(`Mobile trackers count: ${mobileTrackers.length} for ${appDto.packageName}`);
 
-      // Interroger Exodus en parallèle (même si mobile a fourni des trackers,
-      // on récupère cependant les données externes pour enrichir/compléter)
-      this.logger.debug(`Querying Exodus for ${appDto.packageName}...`);
+      const detectedTrackerObjects = this.trackerDetector.detectTrackers(appDto, allTrackers);
+      const detectorTrackers: string[] = detectedTrackerObjects.map(t => t.name).filter(Boolean);
       const exodusTrackers: string[] = await this.exodusService.getTrackers(appDto.packageName);
-      this.logger.debug(`Exodus trackers count: ${exodusTrackers.length} for ${appDto.packageName}`);
 
       const dbTrackers: string[] = app.trackers || [];
-      this.logger.debug(`DB trackers count: ${dbTrackers.length} for ${app.packageName}`);
 
-      // Fusionner et dédupliquer (préserver l'ordre: DB -> Exodus -> Mobile)
-      const mergedSet = new Set<string>([...dbTrackers, ...exodusTrackers, ...mobileTrackers]);
+      const mergedSet = new Set<string>([
+        ...dbTrackers,
+        ...exodusTrackers,
+        ...detectorTrackers,
+        ...mobileTrackers
+      ]);
       const finalTrackers = Array.from(mergedSet);
-
-      // Sauvegarder les trackers fusionnés dans l'objet app (pour usage/futurs scans)
       app.trackers = finalTrackers;
 
-      // Enregistrer une trace des sources pour audit/debug (champ libre, schema peut l'ignorer)
-      try {
-        (app as any).trackerSources = {
-          mobileCount: mobileTrackers.length,
-          exodusCount: exodusTrackers.length,
-          dbCount: dbTrackers.length,
-          mergedCount: finalTrackers.length,
-          lastFetched: new Date(),
-        };
-      } catch (e) {
-        this.logger.debug('Could not set trackerSources on app object', e?.message || e);
-      }
-
-      this.logger.log(`Final trackers count: ${finalTrackers.length} for ${appDto.packageName}`);
-
-      // 3. Calculate risk
       const riskResult = this.riskCalculator.calculateRiskScore({
         permissions: appDto.permissions,
         trackers: finalTrackers,
@@ -112,15 +100,13 @@ export class ScanService {
         communityScore: app.communityScore,
       });
 
-      // 4. Update app metadata
       app.isDebuggable = appDto.isDebuggable ?? app.isDebuggable;
       app.scanCount += 1;
       app.lastScanned = new Date();
-      app.privacyScore = riskResult.score; // ✅ Mettre à jour le score
+      app.privacyScore = riskResult.score;
 
       await app.save();
 
-      // 5. Final Response
       return {
         packageName: appDto.packageName,
         name: app.name,
@@ -129,14 +115,14 @@ export class ScanService {
         riskLevel: this.riskCalculator.getRiskLevel(riskResult.score),
         alerts: riskResult.alerts,
         breakdown: riskResult.breakdown,
-        trackers: finalTrackers, // ✅ Maintenant rempli !
+        trackers: finalTrackers,
         permissions: {
           dangerous: riskResult.breakdown['permissions']?.list || [],
           total: appDto.permissions.length,
         },
       };
+
     } catch (error) {
-      this.logger.error(`Failed to analyze ${appDto.packageName}`, error.stack);
       return {
         packageName: appDto.packageName,
         name: appDto.name || 'Unknown',
@@ -145,6 +131,7 @@ export class ScanService {
         error: 'Analysis failed',
         trackers: [],
         permissions: { dangerous: [], total: 0 },
+        alerts: [],
       };
     }
   }
@@ -203,49 +190,10 @@ export class ScanService {
     return false;
   }
 
-  private async getAppStats(packageName: string) {
-    const scans = await this.scanModel
-      .find({ 'report.results.packageName': packageName })
-      .limit(100)
-      .exec();
-
-    return {
-      totalScans: scans.length,
-      lastScanned: scans[0]?.createdAt || null,
-      avgScoreFromCommunity: this.calculateAvgScore(scans, packageName),
-    };
-  }
 
 
-  private calculateAvgScore(scans: Scan[], packageName: string) {
-    const scores = scans
-      .flatMap(s => s.report?.results || [])
-      .filter(r => r.packageName === packageName && r.score !== undefined)
-      .map(r => r.score);
 
-    if (!scores.length) return 0;
 
-    return scores.reduce((a, b) => a + b, 0) / scores.length;
-  }
-
-  private generateRecommendations(app: any) {
-    const rec: string[] = [];
-
-    if (app.privacyScore < 30) {
-      rec.push('🔴 RISQUE CRITIQUE - désinstaller cette application');
-    }
-
-    if (app.trackers?.length > 5) {
-      rec.push(`⚠️ Trop de trackers (${app.trackers.length})`);
-    }
-
-    if (this.getDangerousPermissions(app.permissions).length > 3) {
-      rec.push('⚠️ Permissions très sensibles détectées');
-    }
-
-    if (rec.length === 0) rec.push('✅ Application relativement sûre');
-    return rec;
-  }
 
 
   // Méthode existante uploadApk (améliorée)
@@ -257,7 +205,6 @@ export class ScanService {
 
       this.logger.log(`APK uploaded with hash: ${hash}`);
 
-      // 2. Scanner avec MobSF
       await this.mobsfService.scanApk(hash);
 
       // 3. Récupérer le rapport
@@ -344,7 +291,6 @@ export class ScanService {
     return recommendations;
   }
 
-  // Méthode existante analyzeMetadata (améliorée)
   async analyzeMetadata(meta: any) {
     const riskResult = this.riskCalculator.calculateRiskScore({
       permissions: meta.permissions || [],
@@ -390,5 +336,356 @@ export class ScanService {
         privacyScore: x.privacyScore,
         improvement: x.privacyScore - app.privacyScore,
       }));
+  }
+
+  // -------------------------------------------------------------
+  // SCAN HISTORY - GET ALL SCANS
+  // -------------------------------------------------------------
+  async getUserScans(
+    userHash: string,
+    options: GetScansQueryDto,): Promise<GetScansResponseDto> {
+    try {
+      this.logger.log(`📜 Fetching scans for user: ${userHash}`);
+
+      const {
+        limit = 10,
+        page = 1,
+        sortOrder = SortOrder.DESC,
+        startDate,
+        endDate,
+        minApps,
+        maxApps,
+      } = options;
+      const filter: any = { userHash };
+
+      if (startDate || endDate) {
+        filter.createdAt = {};
+        if (startDate) filter.createdAt.$gte = new Date(startDate);
+        if (endDate) filter.createdAt.$lte = new Date(endDate);
+      }
+      if (minApps !== undefined || maxApps !== undefined) {
+        filter.totalApps = {};
+        if (minApps !== undefined) filter.totalApps.$gte = minApps;
+        if (maxApps !== undefined) filter.totalApps.$lte = maxApps;
+      }
+
+      //  Compter le total
+      const total = await this.scanModel.countDocuments(filter);
+
+      //  Calculer la pagination
+      const skip = (page - 1) * limit;
+      const totalPages = Math.ceil(total / limit);
+
+      //  Récupérer les scans
+      const scans = await this.scanModel
+        .find(filter)
+        .sort({ createdAt: sortOrder === SortOrder.DESC ? -1 : 1 })
+        .skip(skip)
+        .limit(limit)
+        .select('-__v') // Exclure __v
+        .lean()
+        .exec();
+
+      this.logger.log(`✅ Found ${scans.length} scans (page ${page}/${totalPages})`);
+
+      // ✅ Calculer les statistiques
+      const stats = await this.calculateUserStats(userHash);
+
+      return {
+        scans,
+        pagination: {
+          total,
+          page,
+          limit,
+          totalPages,
+          hasNext: page < totalPages,
+          hasPrev: page > 1,
+        },
+        stats,
+      };
+    } catch (error) {
+      this.logger.error('❌ Get user scans failed', error.stack);
+      throw new Error(`Failed to get user scans: ${error.message}`);
+    }
+  }
+
+  // -------------------------------------------------------------
+  // 📊 CALCULATE USER STATS
+  // -------------------------------------------------------------
+  private async calculateUserStats(userHash: string): Promise<{
+    totalScans: number;
+    avgAppsPerScan: number;
+    avgScore: number;
+    totalAppsScanned: number;
+  } | null> {
+    try {
+      const scans = await this.scanModel.find({ userHash }).lean().exec();
+
+      if (scans.length === 0) {
+        return {
+          totalScans: 0,
+          avgAppsPerScan: 0,
+          avgScore: 0,
+          totalAppsScanned: 0,
+        };
+      }
+
+      // ✅ AJOUTÉ: Vérification pour totalApps
+      const totalApps = scans.reduce((sum, scan) => sum + (scan.totalApps || 0), 0);
+      const totalScore = scans.reduce(
+        (sum, scan) => sum + (scan.summary?.avgScore || 0),
+        0,
+      );
+
+      return {
+        totalScans: scans.length,
+        avgAppsPerScan: Math.round(totalApps / scans.length),
+        avgScore: Math.round(totalScore / scans.length),
+        totalAppsScanned: totalApps,
+      };
+    } catch (error) {
+      this.logger.error('❌ Calculate stats failed', error.stack);
+      return null;
+    }
+  }
+
+  // -------------------------------------------------------------
+  // 🔍 GET SCAN BY ID
+  // -------------------------------------------------------------
+  async getScanById(scanId: string) {
+    try {
+      this.logger.log(`🔍 Fetching scan: ${scanId}`);
+
+      const scan = await this.scanModel.findById(scanId).lean().exec();
+
+      if (!scan) {
+        throw new Error(`Scan not found: ${scanId}`);
+      }
+
+      this.logger.log(`✅ Scan found: ${scan.totalApps} apps`);
+      return scan;
+    } catch (error) {
+      this.logger.error('❌ Get scan by ID failed', error.stack);
+      throw new Error(`Failed to get scan: ${error.message}`);
+    }
+  }
+
+  // -------------------------------------------------------------
+  // 📌 GET LATEST SCAN
+  // -------------------------------------------------------------
+  async getLatestScan(userHash: string) {
+    try {
+      this.logger.log(`📌 Fetching latest scan for: ${userHash}`);
+
+      const scan = await this.scanModel
+        .findOne({ userHash })
+        .sort({ createdAt: -1 })
+        .lean()
+        .exec();
+
+      if (!scan) {
+        this.logger.log(`ℹ️ No scans found for user: ${userHash}`);
+        return null;
+      }
+
+      this.logger.log(`✅ Latest scan: ${scan._id} (${scan.totalApps} apps)`);
+      return scan;
+    } catch (error) {
+      this.logger.error('❌ Get latest scan failed', error.stack);
+      throw new Error(`Failed to get latest scan: ${error.message}`);
+    }
+  }
+
+  // -------------------------------------------------------------
+  // 🗑️ DELETE SCAN
+  // -------------------------------------------------------------
+  async deleteScan(scanId: string, userHash: string) {
+    try {
+      this.logger.log(`🗑️ Deleting scan: ${scanId}`);
+
+      const scan = await this.scanModel.findOne({ _id: scanId, userHash });
+
+      if (!scan) {
+        throw new Error('Scan not found or unauthorized');
+      }
+
+      await this.scanModel.deleteOne({ _id: scanId });
+
+      this.logger.log(`✅ Scan deleted: ${scanId}`);
+      return {
+        success: true,
+        message: 'Scan deleted successfully',
+        deletedScanId: scanId,
+      };
+    } catch (error) {
+      this.logger.error('❌ Delete scan failed', error.stack);
+      throw new Error(`Failed to delete scan: ${error.message}`);
+    }
+  }
+
+  // -------------------------------------------------------------
+  // 🔄 COMPARE TWO SCANS
+  // -------------------------------------------------------------
+  async compareScans(
+    scanId1: string,
+    scanId2: string,
+    userHash: string,
+  ): Promise<ComparisonResultDto> {
+    try {
+      this.logger.log(`🔄 Comparing scans: ${scanId1} vs ${scanId2}`);
+
+      const [scan1, scan2] = await Promise.all([
+        this.scanModel.findOne({ _id: scanId1, userHash }).lean().exec(),
+        this.scanModel.findOne({ _id: scanId2, userHash }).lean().exec(),
+      ]);
+
+      if (!scan1 || !scan2) {
+        throw new Error('One or both scans not found');
+      }
+
+      const packages1 = new Set<string>(
+        scan1.report.results.map((r: any) => String(r.packageName))
+      );
+      const packages2 = new Set<string>(
+        scan2.report.results.map((r: any) => String(r.packageName))
+      );
+
+      const newApps: string[] = Array.from(packages2).filter(
+        (p: string) => !packages1.has(p)
+      );
+      const removedApps: string[] = Array.from(packages1).filter(
+        (p) => !packages2.has(p)
+      );
+      const unchangedApps: string[] = Array.from(packages1).filter((p) =>
+        packages2.has(p)
+      );
+
+      const scoreChanges: Array<{
+        packageName: string;
+        name: string;
+        oldScore: number;
+        newScore: number;
+        change: number;
+      }> = [];
+
+      for (const pkg of unchangedApps) {
+        const app1 = scan1.report.results.find(
+          (r: any) => r.packageName === pkg
+        );
+        const app2 = scan2.report.results.find(
+          (r: any) => r.packageName === pkg
+        );
+
+        if (app1 && app2 && app1.score !== app2.score) {
+          scoreChanges.push({
+            packageName: pkg,
+            name: app2.name || 'Unknown',
+            oldScore: app1.score || 0,
+            newScore: app2.score || 0,
+            change: (app2.score || 0) - (app1.score || 0),
+          });
+        }
+      }
+
+      // ✅ Trier par changement (plus grand changement en premier)
+      scoreChanges.sort((a, b) => Math.abs(b.change) - Math.abs(a.change));
+
+      // ✅ Calculer le changement moyen de score
+      const avgScoreChange =
+        scoreChanges.length > 0
+          ? scoreChanges.reduce((sum, c) => sum + c.change, 0) /
+          scoreChanges.length
+          : 0;
+
+      this.logger.log(
+        `✅ Comparison complete: ${newApps.length} new, ${removedApps.length} removed`,
+      );
+
+      return {
+        scan1: {
+          scanId: scan1._id.toString(),
+          scanDate: scan1.createdAt || new Date(), // ✅ Valeur par défaut
+          totalApps: scan1.totalApps || 0, // ✅ Valeur par défaut
+          avgScore: scan1.summary?.avgScore || 0,
+        },
+        scan2: {
+          scanId: scan2._id.toString(),
+          scanDate: scan2.createdAt || new Date(), // ✅ Valeur par défaut
+          totalApps: scan2.totalApps || 0, // ✅ Valeur par défaut
+          avgScore: scan2.summary?.avgScore || 0,
+        },
+        differences: {
+          newApps,
+          removedApps,
+          unchangedApps,
+          scoreChanges,
+        },
+        summary: {
+          totalChanges: newApps.length + removedApps.length + scoreChanges.length,
+          appsAdded: newApps.length,
+          appsRemoved: removedApps.length,
+          avgScoreChange: Math.round(avgScoreChange),
+        },
+      };
+    } catch (error) {
+      this.logger.error('❌ Compare scans failed', error.stack);
+      throw new Error(`Failed to compare scans: ${error.message}`);
+    }
+  }
+
+  // -------------------------------------------------------------
+  // 📊 GET SCAN STATISTICS
+  // -------------------------------------------------------------
+  async getScanStatistics(userHash: string) {
+    try {
+      this.logger.log(`📊 Getting statistics for: ${userHash}`);
+
+      const scans = await this.scanModel
+        .find({ userHash })
+        .sort({ createdAt: -1 })
+        .lean()
+        .exec();
+
+      if (scans.length === 0) {
+        return {
+          totalScans: 0,
+          firstScan: null,
+          lastScan: null,
+          avgAppsPerScan: 0,
+          avgScore: 0,
+          scoreEvolution: [],
+          appsEvolution: [],
+        };
+      }
+
+      // ✅ Évolution du score dans le temps
+      const scoreEvolution = scans.map((scan) => ({
+        date: scan.createdAt,
+        avgScore: scan.summary?.avgScore || 0,
+        scanId: scan._id.toString(),
+      }));
+
+      // ✅ Évolution du nombre d'apps dans le temps
+      const appsEvolution = scans.map((scan) => ({
+        date: scan.createdAt,
+        totalApps: scan.totalApps,
+        scanId: scan._id.toString(),
+      }));
+
+      const stats = await this.calculateUserStats(userHash);
+
+      return {
+        totalScans: scans.length,
+        firstScan: scans[scans.length - 1].createdAt,
+        lastScan: scans[0].createdAt,
+        avgAppsPerScan: stats?.avgAppsPerScan || 0,
+        avgScore: stats?.avgScore || 0,
+        scoreEvolution: scoreEvolution.reverse(), // Chronologique
+        appsEvolution: appsEvolution.reverse(), // Chronologique
+      };
+    } catch (error) {
+      this.logger.error('❌ Get statistics failed', error.stack);
+      throw new Error(`Failed to get statistics: ${error.message}`);
+    }
   }
 }
