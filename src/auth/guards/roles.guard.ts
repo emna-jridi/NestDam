@@ -1,7 +1,11 @@
-import { Injectable, CanActivate, ExecutionContext } from '@nestjs/common';
+import {
+  Injectable,
+  CanActivate,
+  ExecutionContext,
+  ForbiddenException,
+} from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { Request } from 'express';
-import { UserDocument } from 'src/user-management/entities/user.entity';
 
 @Injectable()
 export class RolesGuard implements CanActivate {
@@ -18,13 +22,32 @@ export class RolesGuard implements CanActivate {
     if (!requiredRoles || requiredRoles.length === 0) {
       return true;
     }
+
     const request = context
       .switchToHttp()
-      .getRequest<Request & { user?: UserDocument }>();
+      .getRequest<
+        Request & { user?: { userId: string; email?: string; role?: string } }
+      >();
     const user = request.user;
-    if (!user || !user.role) return false;
-    if (!user || !user.role) return false;
 
-    return requiredRoles.includes(user.role);
+    if (!user) {
+      throw new ForbiddenException('User not authenticated');
+    }
+
+    if (!user.role) {
+      throw new ForbiddenException('User role not found in token');
+    }
+
+    // Convert requiredRoles to strings in case enum values are passed
+    const requiredRolesStrings = requiredRoles.map((role) => String(role));
+    const hasRole = requiredRolesStrings.includes(user.role);
+
+    if (!hasRole) {
+      throw new ForbiddenException(
+        `Access denied. Required roles: ${requiredRolesStrings.join(', ')}`,
+      );
+    }
+
+    return true;
   }
 }
