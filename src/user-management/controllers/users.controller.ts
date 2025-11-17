@@ -131,6 +131,34 @@ export class UsersController {
     return this.usersService.getProfile(userId);
   }
 
+  @Get(':id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(BasicRoles.Admin)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Get user by ID',
+    description:
+      'Retrieves detailed information about a specific user by their ID. Admin access required.',
+  })
+  @ApiParam({
+    name: 'id',
+    description: 'User ID',
+    example: '64b8f9f3a6c4b2a1d0e1f234',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'User details retrieved successfully',
+    type: UserResponseDto,
+  })
+  @ApiUnauthorizedResponse({
+    description: 'Unauthorized - Invalid or missing token',
+  })
+  @ApiForbiddenResponse({ description: 'Forbidden - Admin role required' })
+  @ApiNotFoundResponse({ description: 'User not found' })
+  async getUserById(@Param('id') id: string): Promise<Partial<User>> {
+    return this.usersService.getUserById(id);
+  }
+
   @Patch('/profile/:id')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()

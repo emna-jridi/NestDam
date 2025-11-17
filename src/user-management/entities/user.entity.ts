@@ -19,7 +19,7 @@ export class User {
   surname: string;
 
   @Prop({ unique: true })
-  phone: string;
+  phone?: string;
 
   @Prop()
   avatar?: string;

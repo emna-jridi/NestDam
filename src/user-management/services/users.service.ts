@@ -119,4 +119,16 @@ export class UsersService {
     }
     return user.toObject();
   }
+
+  async getUserById(id: string): Promise<Partial<User>> {
+    const user = await this.userModel
+      .findById(id)
+      .select(
+        '-password -refreshToken -resetPasswordCode -resetPasswordExpires',
+      );
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+    return user.toObject();
+  }
 }
