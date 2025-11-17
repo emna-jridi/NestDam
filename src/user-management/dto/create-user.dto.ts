@@ -1,6 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { IsEmail, IsNotEmpty, IsOptional, MinLength } from 'class-validator';
-import { RegisterDeviceDto } from 'src/devices/dto/register-device.dto';
+import { RegisterDeviceDto } from '../../devices/dto/register-device.dto';
 
 export class CreateUserDto {
   @ApiProperty({ example: 'johndoe' })

@@ -4,7 +4,7 @@ import { DevicesService } from './services/devices.service';
 import { DevicesController } from './controllers/devices.controller';
 import { Device, DeviceSchema } from './schemas/device.schema';
 import { DeviceScan, DeviceScanSchema } from './schemas/device-scan.schema';
-import { User, UserSchema } from 'src/user-management/entities/user.entity';
+import { User, UserSchema } from '../user-management/entities/user.entity';
 
 @Module({
   imports: [

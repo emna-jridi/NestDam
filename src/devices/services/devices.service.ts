@@ -10,7 +10,7 @@ import { Model, Types } from 'mongoose';
 import { Device } from '../schemas/device.schema';
 import { RegisterDeviceDto } from '../dto/register-device.dto';
 import { DeviceScan } from '../schemas/device-scan.schema';
-import { User } from 'src/user-management/entities/user.entity';
+import { User } from '../../user-management/entities/user.entity';
 
 @Injectable()
 export class DevicesService {
