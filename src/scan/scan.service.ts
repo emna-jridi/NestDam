@@ -12,6 +12,9 @@ import { TrackerDetectorService } from 'src/analysis/tracker-detector.service';
 import { Tracker } from 'src/app-registry/schemas/tracker.schema';
 import { ComparisonResultDto } from './dto/compare-scans.dto';
 import { GetScansQueryDto, GetScansResponseDto, SortOrder } from './dto/get-scans.dto';
+import { EtipService } from 'src/external-apis/etip.service';
+import { log } from 'console';
+import { EtipTracker } from 'src/external-apis/interfaces/etip-tracker.interface';
 
 @Injectable()
 export class ScanService {
@@ -26,21 +29,28 @@ export class ScanService {
     private exodusService: ExodusService,
     private appRegistryService: AppRegistryService,
     private riskCalculator: RiskCalculatorService,
+    private etipService: EtipService,
   ) { }
 
   // -------------------------------------------------------------
-  //  MAIN ENTRY : ANALYZE INSTALLED APPS FROM MOBILE - ✅ CORRIGÉ
+  //  MAIN ENTRY : ANALYZE INSTALLED APPS FROM MOBILE -
   // -------------------------------------------------------------
-  async analyzeInstalledApps(userHash: string, apps: InstalledAppDto[]) {
-
+async analyzeInstalledApps(userHash: string, apps: InstalledAppDto[]) {
     try {
-      const allTrackers = await this.trackerModel.find().exec();
+      // 1) Get all ETIP trackers (cached in Redis)
+      const etipTrackers = await this.etipService.getAllTrackers();
+
+      // 2) Analyze each app with ETIP + heuristics + permissions
       const results = await Promise.all(
-        apps.map(app => this.analyzeInstalledAppWithDetection(app, allTrackers))
+        apps.map((app) =>
+          this.analyzeInstalledAppWithDetection(app, etipTrackers),
+        ),
       );
 
+      // 3) Generate summary
       const summary = this.generateSummary(results);
 
+      // 4) Save scan in Mongo
       const scan = await this.scanModel.create({
         type: 'batch_installed',
         userHash,
@@ -51,6 +61,7 @@ export class ScanService {
         summary,
       });
 
+      // 5) Return response to mobile
       return {
         scanId: scan.id.toString(),
         userHash,
@@ -59,85 +70,314 @@ export class ScanService {
         summary,
         createdAt: scan.createdAt,
       };
-
-    } catch (error) {
+    } catch (error: any) {
+      this.logger.error('Failed to analyze installed apps', error.stack);
       throw new Error(`Failed to analyze installed apps: ${error.message}`);
     }
   }
 
 
   // -------------------------------------------------------------
-  // ⭐ Analyze ONE single installed app - ✅ CORRIGÉ
+  //  Analyze ONE single installed app - 
   // -------------------------------------------------------------
   private async analyzeInstalledAppWithDetection(
-    appDto: InstalledAppDto,
-    allTrackers: Tracker[]
+    app: InstalledAppDto,
+    etipTrackers: EtipTracker[],
   ) {
-    try {
-      const app = await this.appRegistryService.getOrCreateApp(appDto.packageName);
+    const packageName = app.packageName ?? '';
+    const appName = app.name ?? packageName;
 
-      const mobileTrackers: string[] = appDto.trackers || [];
+    const permissions = app.permissions ?? [];
+    const trackersHints = app.trackers ?? []; // strings from mobile scan (libs, SDKs, etc.)
+    const isDebuggable = !!app.isDebuggable;
 
-      const detectedTrackerObjects = this.trackerDetector.detectTrackers(appDto, allTrackers);
-      const detectorTrackers: string[] = detectedTrackerObjects.map(t => t.name).filter(Boolean);
-      const exodusTrackers: string[] = await this.exodusService.getTrackers(appDto.packageName);
+    // 1) Dangerous permissions (Android official dangerous group)
+    const dangerousPermissions = this.getDangerousPermissions(permissions);
 
-      const dbTrackers: string[] = app.trackers || [];
+    // 2) ETIP matching
+    const matchedEtipTrackers = this.matchTrackersWithEtip(
+      packageName,
+      trackersHints,
+      etipTrackers,
+    );
 
-      const mergedSet = new Set<string>([
-        ...dbTrackers,
-        ...exodusTrackers,
-        ...detectorTrackers,
-        ...mobileTrackers
-      ]);
-      const finalTrackers = Array.from(mergedSet);
-      app.trackers = finalTrackers;
+    // 3) Heuristic detection (filenames, libs, suspicious combos)
+    const heuristicFindings = this.detectHeuristicBehaviors(app, dangerousPermissions, matchedEtipTrackers);
 
-      const riskResult = this.riskCalculator.calculateRiskScore({
-        permissions: appDto.permissions,
-        trackers: finalTrackers,
-        isDebuggable: appDto.isDebuggable || app.isDebuggable || false,
-        communityScore: app.communityScore,
-      });
+    // 4) Compute score
+    const {
+      score,
+      permissionPenalty,
+      trackerPenalty,
+      debugPenalty,
+      heuristicPenalty,
+      riskLevel,
+    } = this.computeScore({
+      dangerousPermissions,
+      etipTrackers: matchedEtipTrackers,
+      isDebuggable,
+      heuristicFindings,
+    });
 
-      app.isDebuggable = appDto.isDebuggable ?? app.isDebuggable;
-      app.scanCount += 1;
-      app.lastScanned = new Date();
-      app.privacyScore = riskResult.score;
+    // 5) Build alerts
+    const alerts = this.buildAlerts({
+      appName,
+      dangerousPermissions,
+      matchedEtipTrackers,
+      isDebuggable,
+      heuristicFindings,
+      riskLevel,
+    });
 
-      await app.save();
-
-      return {
-        packageName: appDto.packageName,
-        name: app.name,
-        version: appDto.version,
-        score: riskResult.score,
-        riskLevel: this.riskCalculator.getRiskLevel(riskResult.score),
-        alerts: riskResult.alerts,
-        breakdown: riskResult.breakdown,
-        trackers: finalTrackers,
+    // 6) Return enriched result
+    return {
+      packageName,
+      name: appName,
+      version: app.version ?? '',
+      score,
+      riskLevel,
+      alerts,
+      breakdown: {
         permissions: {
-          dangerous: riskResult.breakdown['permissions']?.list || [],
-          total: appDto.permissions.length,
+          penalty: permissionPenalty,
+          count: dangerousPermissions.length,
+          list: dangerousPermissions,
         },
-      };
-
-    } catch (error) {
-      return {
-        packageName: appDto.packageName,
-        name: appDto.name || 'Unknown',
-        score: 0,
-        riskLevel: 'UNKNOWN',
-        error: 'Analysis failed',
-        trackers: [],
-        permissions: { dangerous: [], total: 0 },
-        alerts: [],
-      };
-    }
+        trackers: {
+          penalty: trackerPenalty,
+          count: matchedEtipTrackers.length,
+          list: matchedEtipTrackers.map((t) => t.name),
+        },
+        heuristics: {
+          penalty: heuristicPenalty,
+          count: heuristicFindings.length,
+          list: heuristicFindings,
+        },
+        debug: {
+          penalty: debugPenalty,
+          isDebuggable,
+        },
+      },
+      trackers: matchedEtipTrackers.map((t) => t.name),
+      permissions: {
+        dangerous: dangerousPermissions,
+        total: permissions.length,
+      },
+    };
   }
 
+    /**
+   * Returns list of dangerous permissions from full list
+   */
+  private getDangerousPermissions(allPermissions: string[]): string[] {
+    const dangerousKeywords = [
+      'READ_SMS',
+      'RECEIVE_SMS',
+      'SEND_SMS',
+      'READ_CONTACTS',
+      'WRITE_CONTACTS',
+      'READ_CALL_LOG',
+      'WRITE_CALL_LOG',
+      'RECORD_AUDIO',
+      'CAMERA',
+      'ACCESS_FINE_LOCATION',
+      'ACCESS_COARSE_LOCATION',
+      'ACCESS_BACKGROUND_LOCATION',
+      'READ_CALENDAR',
+      'WRITE_CALENDAR',
+      'READ_EXTERNAL_STORAGE',
+      'WRITE_EXTERNAL_STORAGE',
+      'READ_MEDIA_IMAGES',
+      'READ_MEDIA_VIDEO',
+      'READ_MEDIA_AUDIO',
+      'MANAGE_ACCOUNTS',
+      'USE_CREDENTIALS',
+      'READ_PHONE_STATE',
+      'PROCESS_OUTGOING_CALLS',
+    ];
+
+    const lowerDangerous = dangerousKeywords.map((p) => p.toLowerCase());
+
+    return allPermissions.filter((p) =>
+      lowerDangerous.some((d) => p.toLowerCase().includes(d)),
+    );
+  }
+
+    /**
+   * Match installed app with ETIP trackers using:
+   * - code_signature
+   * - network_signature
+   * - package name + "hints" from the device
+   */
+  private matchTrackersWithEtip(
+    packageName: string,
+    trackersHints: string[],
+    etipTrackers: EtipTracker[],
+  ): EtipTracker[] {
+    const lowerPkg = packageName.toLowerCase();
+    const lowerHints = trackersHints.map((s) => s.toLowerCase());
+
+    return etipTrackers.filter((t) => {
+      const codeSig = t.code_signature?.toLowerCase() ?? '';
+      const netSig = t.network_signature?.toLowerCase() ?? '';
+
+      const matchesCode =
+        !!codeSig &&
+        (lowerPkg.includes(codeSig) ||
+          lowerHints.some((s) => s.includes(codeSig)));
+
+      const matchesNet =
+        !!netSig &&
+        (lowerPkg.includes(netSig) ||
+          lowerHints.some((s) => s.includes(netSig)));
+
+      return matchesCode || matchesNet;
+    });
+  }
+  /**
+   * Heuristic detection of suspicious behaviors
+   */
+  private detectHeuristicBehaviors(
+    app: InstalledAppDto,
+    dangerousPermissions: string[],
+    matchedTrackers: EtipTracker[],
+  ): string[] {
+    const findings: string[] = [];
+    const perms = dangerousPermissions.map((p) => p.toUpperCase());
+
+    const hasLocation =
+      perms.some((p) =>
+        ['ACCESS_FINE_LOCATION', 'ACCESS_BACKGROUND_LOCATION', 'ACCESS_COARSE_LOCATION'].some((k) =>
+          p.includes(k),
+        ),
+      );
+
+    const hasCamera = perms.some((p) => p.includes('CAMERA'));
+    const hasMic = perms.some((p) => p.includes('RECORD_AUDIO'));
+    const hasContacts = perms.some((p) => p.includes('READ_CONTACTS'));
+    const hasSms = perms.some((p) => p.includes('READ_SMS') || p.includes('RECEIVE_SMS'));
+    const hasCallLog = perms.some((p) => p.includes('READ_CALL_LOG'));
+
+    // Example heuristics
+    if (hasLocation && matchedTrackers.length > 2) {
+      findings.push(
+        'Possible precise location tracking with multiple trackers',
+      );
+    }
+
+    if (hasCamera && hasMic && matchedTrackers.length > 0) {
+      findings.push(
+        'Camera + microphone + trackers: potential surveillance risk',
+      );
+    }
+
+    if (hasContacts && matchedTrackers.length > 0) {
+      findings.push(
+        'Access to contacts combined with trackers: high profiling potential',
+      );
+    }
+
+    if (hasSms || hasCallLog) {
+      findings.push('App can access SMS or call logs: sensitive metadata risk');
+    }
+
+    // You can also use app.name / category to tune heuristics later
+    return findings;
+  }
+    /**
+   * Compute score & penalties based on:
+   * - dangerous permissions
+   * - ETIP trackers
+   * - debug flag
+   * - heuristic findings
+   */
+  private computeScore(params: {
+    dangerousPermissions: string[];
+    etipTrackers: EtipTracker[];
+    isDebuggable: boolean;
+    heuristicFindings: string[];
+  }) {
+    const { dangerousPermissions, etipTrackers, isDebuggable, heuristicFindings } = params;
+
+    // Penalties
+    const permissionPenalty = dangerousPermissions.length * 5; // 5 points per dangerous perm
+    const trackerPenalty = etipTrackers.length * 3; // 3 per tracker
+    const debugPenalty = isDebuggable ? 15 : 0; // dev build shipped
+    const heuristicPenalty = heuristicFindings.length * 5; // 5 per heuristic alert
+
+    let rawScore =
+      100 - (permissionPenalty + trackerPenalty + debugPenalty + heuristicPenalty);
+
+    rawScore = Math.max(0, Math.min(100, rawScore));
+
+    const riskLevel =
+      rawScore < 25
+        ? 'CRITICAL'
+        : rawScore < 50
+        ? 'HIGH'
+        : rawScore < 75
+        ? 'MEDIUM'
+        : 'LOW';
+
+    return {
+      score: rawScore,
+      riskLevel,
+      permissionPenalty,
+      trackerPenalty,
+      debugPenalty,
+      heuristicPenalty,
+    };
+  }
+  private buildAlerts(params: {
+    appName: string;
+    dangerousPermissions: string[];
+    matchedEtipTrackers: EtipTracker[];
+    isDebuggable: boolean;
+    heuristicFindings: string[];
+    riskLevel: string;
+  }): string[] {
+    const {
+      appName,
+      dangerousPermissions,
+      matchedEtipTrackers,
+      isDebuggable,
+      heuristicFindings,
+      riskLevel,
+    } = params;
+
+    const alerts: string[] = [];
+
+    if (dangerousPermissions.length) {
+      alerts.push(
+        `${dangerousPermissions.length} dangerous permission(s) detected`,
+      );
+    }
+
+    if (matchedEtipTrackers.length) {
+      alerts.push(`${matchedEtipTrackers.length} tracker(s) detected`);
+    }
+
+    if (isDebuggable) {
+      alerts.push('App is debuggable (dev build) – higher attack surface');
+    }
+
+    alerts.push(...heuristicFindings);
+
+    alerts.push(`Overall risk level: ${riskLevel}`);
+
+    // Optional: if CRITICAL, add a warning
+    if (riskLevel === 'CRITICAL') {
+      alerts.push(
+        `We strongly recommend reviewing or uninstalling "${appName}" due to high privacy risks.`,
+      );
+    }
+
+    return alerts;
+  }
+
+
   // -------------------------------------------------------------
-  // ⭐ SUMMARY GENERATOR
+  //  SUMMARY GENERATOR
   // -------------------------------------------------------------
   private generateSummary(results: any[]) {
     const valid = results.filter(r => !r.error);
@@ -169,22 +409,7 @@ export class ScanService {
     };
   }
 
-  private getDangerousPermissions(list: string[]) {
-    const dangerous = [
-      'android.permission.READ_SMS',
-      'android.permission.SEND_SMS',
-      'android.permission.READ_CONTACTS',
-      'android.permission.WRITE_CONTACTS',
-      'android.permission.RECORD_AUDIO',
-      'android.permission.CAMERA',
-      'android.permission.ACCESS_FINE_LOCATION',
-      'android.permission.ACCESS_COARSE_LOCATION',
-      'android.permission.READ_CALL_LOG',
-      'android.permission.WRITE_CALL_LOG',
-    ];
 
-    return list.filter(p => dangerous.includes(p));
-  }
   private hasUnknownTrackers(trackers: string[]) {
     // Later: compare to known trackers list
     return false;

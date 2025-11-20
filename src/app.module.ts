@@ -13,6 +13,7 @@ import { AnalysisModule } from './analysis/analysis.module';
 import { AvatarModule } from './avatar/avatar.module';
 import { GoogleModule } from './google/google.module';
 import { ConfigModule } from '@nestjs/config';
+import { RedisModule } from './redis/redis.module';
 @Module({
   imports: [
 
@@ -28,7 +29,7 @@ import { ConfigModule } from '@nestjs/config';
       secret: 'your-secret-key-change-in-production',
       signOptions: { expiresIn: '15m' },
     }),
-    
+    RedisModule,
     UsersModule,
     AuthModule,
     MailModule,
@@ -38,6 +39,7 @@ import { ConfigModule } from '@nestjs/config';
     AnalysisModule,
     AvatarModule,
     GoogleModule,
+    RedisModule,
   ],
   controllers: [],
   providers: [],

@@ -1,10 +1,80 @@
-version: "3.8"
+version: '3.8'
+
 services:
-  mobsf:
-    image: opensecurity/mobile-security-framework-mobsf:latest
-    container_name: mobsf
+  # Backend NestJS
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: shadowguard-backend
     ports:
-      - "8000:8000"
-    volumes:
-      - ./mobsf_data:/root/.MobSF
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - MONGO_URI=mongodb://mongo:27017/shadowguard  
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - ETIP_BASE_URL=http://host.docker.internal:8000 
+    depends_on:
+      mongo:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    networks:
+      - shadowguard-network
     restart: unless-stopped
+   
+
+  # MongoDB
+  mongo:
+    image: mongo:7-jammy  # ← Version plus récente et stable
+    container_name: shadowguard-mongo
+    ports:
+      - "27017:27017"
+    environment:
+      - MONGO_INITDB_DATABASE=shadowguard
+    volumes:
+      - mongo-data:/data/db  # ← IMPORTANT : Persistance des données
+      - mongo-config:/data/configdb
+    networks:
+      - shadowguard-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  # Redis pour le cache
+  redis:
+    image: redis:7-alpine  # ← Version fixée + image légère
+    container_name: shadowguard-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data  # ← IMPORTANT : Persistance du cache
+    networks:
+      - shadowguard-network
+    restart: unless-stopped
+    command: redis-server --appendonly yes --appendfsync everysec
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+# Réseau personnalisé
+networks:
+  shadowguard-network:
+    driver: bridge
+    name: shadowguard-network
+
+# Volumes pour la persistance des données
+volumes:
+  mongo-data:
+    name: shadowguard-mongo-data
+  mongo-config:
+    name: shadowguard-mongo-config
+  redis-data:
+    name: shadowguard-redis-data

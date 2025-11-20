@@ -39,12 +39,11 @@ export class ScanController {
 
   ) { }
 
-  // ⭐ NOUVEAU : Analyser les apps installées depuis le mobile
+  //  NOUVEAU : Analyser les apps installées depuis le mobile
   @Post('installed')
   @UseGuards(JwtAuthGuard)
   async scanInstalledApps(@Body() dto: AnalyzeInstalledAppsDto ){
     const userHash = dto.userHash; 
-
     try {
       return await this.scanService.analyzeInstalledApps(userHash, dto.apps);
     } catch (error) {
