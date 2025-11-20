@@ -241,6 +241,8 @@ export class AuthService {
       email: user.email,
       sub: user._id.toString(),
       role: user.role,
+      userHash: user.userHash, // <--- add this
+
     };
 
     const accessToken = this.jwtService.sign(payload);

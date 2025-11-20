@@ -13,6 +13,8 @@ import { AnalysisModule } from './analysis/analysis.module';
 import { AvatarModule } from './avatar/avatar.module';
 import { GoogleModule } from './google/google.module';
 import { ConfigModule } from '@nestjs/config';
+import { AlertsModule } from './alerts/alerts.module';
+
 @Module({
   imports: [
 
@@ -38,6 +40,8 @@ import { ConfigModule } from '@nestjs/config';
     AnalysisModule,
     AvatarModule,
     GoogleModule,
+    AlertsModule,
+
   ],
   controllers: [],
   providers: [],
