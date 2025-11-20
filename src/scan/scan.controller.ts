@@ -29,6 +29,7 @@ import { ExodusService } from 'src/external-apis/exodus.service';
 import { ComparScansDto } from './dto/compare-scans.dto';
 import { GetScansQueryDto } from './dto/get-scans.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { AnalyzeIosAppsDto } from './dto/ios-screenshot.dto';
 
 @Controller('api/v1/scan')
 export class ScanController {
@@ -355,5 +356,14 @@ async getUserScanHistory(
       data: result
    };
 }
+
+  @Post('ios')
+  @UseGuards(JwtAuthGuard)
+  async scanIosApps(@Body() dto: AnalyzeIosAppsDto, @Req() req: any) {
+    const userHash =
+      dto.userHash || req.user?.userHash || req.user?.sub || 'anonymous';
+
+    return this.scanService.analyzeIosApps(userHash, dto.apps);
+  }
 
 }

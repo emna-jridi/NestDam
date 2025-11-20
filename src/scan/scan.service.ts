@@ -15,6 +15,7 @@ import { GetScansQueryDto, GetScansResponseDto, SortOrder } from './dto/get-scan
 import { EtipService } from 'src/external-apis/etip.service';
 import { log } from 'console';
 import { EtipTracker } from 'src/external-apis/interfaces/etip-tracker.interface';
+import { IosAppDto } from './dto/ios-screenshot.dto';
 
 @Injectable()
 export class ScanService {
@@ -913,4 +914,146 @@ async analyzeInstalledApps(userHash: string, apps: InstalledAppDto[]) {
       throw new Error(`Failed to get statistics: ${error.message}`);
     }
   }
+// -------------------------------------------------------------
+//  iOS: ANALYZE APPS FROM SCREENSHOT
+// -------------------------------------------------------------
+async analyzeIosApps(userHash: string, apps: IosAppDto[]) {
+  try {
+    const results = await Promise.all(
+      apps.map((app) => this.analyzeSingleIosApp(app)),
+    );
+
+    const summary = this.generateSummary(results);
+
+    const scan = await this.scanModel.create({
+      type: 'ios_screenshot',
+      userHash,
+      totalApps: apps.length,
+      report: {
+        results,
+      },
+      summary,
+    });
+
+    return {
+      scanId: scan.id.toString(),
+      userHash,
+      totalApps: apps.length,
+      results,
+      summary,
+      createdAt: scan.createdAt,
+    };
+  } catch (error: any) {
+    this.logger.error('Failed to analyze iOS apps', error.stack);
+    throw new Error(`Failed to analyze iOS apps: ${error.message}`);
+  }
+}
+// -------------------------------------------------------------
+//  iOS: ANALYZE A SINGLE APP
+// -------------------------------------------------------------
+private async analyzeSingleIosApp(app: IosAppDto) {
+  const appName = app.name ?? 'Unknown app';
+  const bundleId = app.bundleId ?? null;
+
+  const dangerousPermissions: string[] = []; // inconnu sur iOS via screenshot
+  const etipTrackers: EtipTracker[] = [];    // inconnu, pas d’analyse binaire ici
+  const isDebuggable = false;                // pas pertinent pour iOS App Store
+
+  const heuristicFindings = this.detectIosHeuristics(app);
+
+  const {
+    score,
+    permissionPenalty,
+    trackerPenalty,
+    debugPenalty,
+    heuristicPenalty,
+    riskLevel,
+  } = this.computeScore({
+    dangerousPermissions,
+    etipTrackers,
+    isDebuggable,
+    heuristicFindings,
+  });
+
+  const alerts = this.buildAlerts({
+    appName,
+    dangerousPermissions,
+    matchedEtipTrackers: etipTrackers,
+    isDebuggable,
+    heuristicFindings,
+    riskLevel,
+  });
+
+  return {
+    platform: 'iOS',
+    bundleId,
+    category: app.category ?? null,
+    packageName: bundleId ?? appName, // pour réutiliser les écrans front
+    name: appName,
+    version: '',
+    score,
+    riskLevel,
+    alerts,
+    breakdown: {
+      permissions: {
+        penalty: permissionPenalty,
+        count: 0,
+        list: [],
+      },
+      trackers: {
+        penalty: trackerPenalty,
+        count: 0,
+        list: [],
+      },
+      heuristics: {
+        penalty: heuristicPenalty,
+        count: heuristicFindings.length,
+        list: heuristicFindings,
+      },
+      debug: {
+        penalty: debugPenalty,
+        isDebuggable,
+      },
+    },
+    trackers: [],
+    permissions: {
+      dangerous: [],
+      total: 0,
+    },
+  };
+}
+// -------------------------------------------------------------
+//  iOS: HEURISTIC DETECTION BASED ON APP NAME
+// -------------------------------------------------------------
+private detectIosHeuristics(app: IosAppDto): string[] {
+  const findings: string[] = [];
+  const name = (app.name ?? '').toLowerCase();
+
+  if (/(facebook|tiktok|instagram|snapchat)/.test(name)) {
+    findings.push(
+      'Major social network – high data collection and profiling expected',
+    );
+  }
+
+  if (/(vpn|proxy)/.test(name)) {
+    findings.push(
+      'VPN / proxy app – may inspect and redirect your network traffic',
+    );
+  }
+
+  if (/(cleaner|optimizer|booster)/.test(name)) {
+    findings.push(
+      'Cleaner / booster apps often request broad access to device data',
+    );
+  }
+
+  if (/keyboard/.test(name)) {
+    findings.push(
+      'Third-party keyboard can see everything you type, including passwords',
+    );
+  }
+
+  return findings;
+}
+
 }
