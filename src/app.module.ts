@@ -14,6 +14,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { DevicesModule } from './devices/devices.module';
+import { LeakcheckModule } from './leakcheck/leakcheck.module';
 
 @Module({
   imports: [
@@ -37,6 +38,7 @@ import { DevicesModule } from './devices/devices.module';
     ExternalApisModule,
     AnalysisModule,
     DevicesModule,
+    LeakcheckModule,
   ],
   controllers: [AppController],
   providers: [AppService],
