@@ -15,6 +15,7 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { DevicesModule } from './devices/devices.module';
 import { LeakcheckModule } from './leakcheck/leakcheck.module';
+import { PrivacyTipsModule } from './privacy-tips/privacy-tips.module';
 
 @Module({
   imports: [
@@ -39,6 +40,7 @@ import { LeakcheckModule } from './leakcheck/leakcheck.module';
     AnalysisModule,
     DevicesModule,
     LeakcheckModule,
+    PrivacyTipsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
