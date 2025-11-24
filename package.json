@@ -18,9 +18,11 @@
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "seed:admin": "ts-node src/seeders/seed-admin.ts",
+    "seed:privacy-tips": "ts-node src/seeders/seed-privacy-tips.ts",
     "test:e2e": "jest --config ./test/jest-e2e.json"
   },
   "dependencies": {
+    "@google/generative-ai": "^0.24.1",
     "@nestjs/axios": "^4.0.1",
     "@nestjs/common": "^11.1.8",
     "@nestjs/config": "^4.0.2",
