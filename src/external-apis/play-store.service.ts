@@ -1,8 +1,6 @@
-// src/modules/external-apis/play-store.service.ts
 
 import { Injectable, Logger } from '@nestjs/common';
-import gplay from 'google-play-scraper'; // npm install google-play-scraper
-
+import gplay from 'google-play-scraper'; 
 @Injectable()
 export class PlayStoreService {
   private readonly logger = new Logger(PlayStoreService.name);

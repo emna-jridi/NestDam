@@ -1,4 +1,3 @@
-
 import { Injectable } from '@nestjs/common';
 
 interface RiskFactors {
@@ -20,8 +19,6 @@ export class RiskCalculatorService {
     let score = 100;
     const breakdown = {};
     const alerts: string[] = [];
-
-    // 1. Permissions dangereuses (-30 points max)
     const dangerousPerms = this.getDangerousPermissions(factors.permissions);
     const permPenalty = Math.min(30, dangerousPerms.length * 10);
     score -= permPenalty;
@@ -34,8 +31,6 @@ export class RiskCalculatorService {
     if (dangerousPerms.length > 0) {
       alerts.push(`${dangerousPerms.length} permission(s) dangereuse(s) détectée(s)`);
     }
-
-    // 2. Trackers (-25 points max)
     const trackerPenalty = Math.min(25, factors.trackers.length * 3);
     score -= trackerPenalty;
     breakdown['trackers'] = {
@@ -46,21 +41,15 @@ export class RiskCalculatorService {
     if (factors.trackers.length > 5) {
       alerts.push(`${factors.trackers.length} trackers détectés`);
     }
-
-    // 3. App debuggable (-20 points)
     if (factors.isDebuggable) {
       score -= 20;
       breakdown['debuggable'] = { penalty: 20 };
       alerts.push('Application debuggable (CRITIQUE)');
     }
-
-    // 4. Bonus score communauté (+10 si bon)
     if (factors.communityScore && factors.communityScore >= 4) {
       score += 10;
       breakdown['community'] = { bonus: 10 };
     }
-
-    // 5. Trackers inconnus (-10)
     if (factors.hasUnknownTrackers) {
       score -= 10;
       breakdown['unknownTrackers'] = { penalty: 10 };
@@ -103,10 +92,5 @@ export class RiskCalculatorService {
     return 'CRITICAL';
   }
 
-  getRiskColor(score: number): string {
-    if (score >= 70) return '#2ECC71'; // Green
-    if (score >= 40) return '#F39C12'; // Orange
-    if (score >= 20) return '#E67E22'; // Dark orange
-    return '#E74C3C'; // Red
-  }
+
 }

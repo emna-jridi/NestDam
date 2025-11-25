@@ -1,4 +1,3 @@
-
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document } from 'mongoose';
 
@@ -26,7 +25,7 @@ export class Permission extends Document {
   riskLevel: PermissionRiskLevel;
 
   @Prop({ min: 0, max: 100 })
-  riskScore: number; // Impact sur le score global
+  riskScore: number; 
 }
 
 export const PermissionSchema = SchemaFactory.createForClass(Permission);

@@ -12,9 +12,8 @@ export class TrackerService {
     private trackerModel: Model<Tracker>,
   ) {}
 
-  /**
-   * ✅ Rechercher des trackers par noms
-   */
+
+  
   async findTrackersByNames(trackerNames: string[]): Promise<Tracker[]> {
     try {
       const trackers = await this.trackerModel

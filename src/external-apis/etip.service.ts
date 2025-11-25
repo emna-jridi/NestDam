@@ -1,3 +1,5 @@
+// src/external-apis/etip.service.ts
+
 import { Injectable, Logger } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
 import { ConfigService } from '@nestjs/config';
@@ -23,56 +25,79 @@ export class EtipService {
   }
 
   /**
-   * Get all trackers from ETIP (with Redis caching)
+   * ✅ Fetch all trackers from ETIP API (JSON endpoint)
    */
   async getAllTrackers(forceRefresh = false): Promise<EtipTracker[]> {
-    if (!forceRefresh) {
-      const cached = await this.redisService.get<EtipTracker[]>(
-        this.cacheKeyAllTrackers,
-      );
-      if (cached && cached.length > 0) {
-        this.logger.debug(
-          `[ETIP] Returning ${cached.length} trackers from Redis cache`,
-        );
-        return cached;
+    try {
+      // 1) Redis Cache
+      if (!forceRefresh) {
+        const cached = await this.redisService.get<EtipTracker[]>(this.cacheKeyAllTrackers);
+        if (cached && cached.length > 0) {
+          this.logger.log(`✅ Retrieved ${cached.length} trackers from Redis cache`);
+          return cached;
+        }
       }
+
+      // 2) Call ETIP JSON API
+      this.logger.log('⏳ Fetching trackers from ETIP API (/api/trackers)...');
+
+      // ✔ CORRECTION : JSON endpoint
+      const url = `${this.baseUrl}/api/trackers`;
+
+      const response = await firstValueFrom(
+        this.http.get<EtipTracker[]>(url, {
+          timeout: 15000,
+        }),
+      );
+
+      let trackers = response.data;
+
+      if (!Array.isArray(trackers)) {
+        this.logger.error(`❌ Unexpected ETIP format: expected array`);
+        this.logger.debug(JSON.stringify(response.data).substring(0, 300));
+        return [];
+      }
+
+      if (trackers.length === 0) {
+        this.logger.warn('⚠️ ETIP returned 0 trackers');
+      } else {
+        this.logger.log(`✅ Received ${trackers.length} trackers from ETIP API`);
+      }
+
+      // 3) Cache in Redis
+      await this.redisService.set(
+        this.cacheKeyAllTrackers,
+        trackers,
+        this.cacheTtlSeconds,
+      );
+
+      return trackers;
+    } catch (error) {
+      this.logger.error(
+        `❌ Failed to fetch ETIP trackers: ${error.message}`,
+        error.stack,
+      );
+
+      const stale = await this.redisService.get<EtipTracker[]>(this.cacheKeyAllTrackers);
+      if (stale) {
+        this.logger.warn(`⚠️ Returning stale cached trackers (${stale.length})`);
+        return stale;
+      }
+
+      return [];
     }
-
-    this.logger.log('[ETIP] Fetching trackers from ETIP API...');
-    // ⚠️ Simple version: first page only. You can extend with pagination later.
-    const url = `${this.baseUrl}/api/trackers/`;
-
-    const response = await firstValueFrom(
-      this.http.get<any>(url, {
-        // If ETIP is paginated with results + next, adapt here
-        // params: { page_size: 1000 },
-      }),
-    );
-
-    // If ETIP returns { results: [...] }
-    const trackers: EtipTracker[] = Array.isArray(response.data)
-      ? response.data
-      : response.data.results ?? [];
-
-    this.logger.log(`[ETIP] Loaded ${trackers.length} trackers from API`);
-
-    await this.redisService.set(this.cacheKeyAllTrackers, trackers, this.cacheTtlSeconds);
-
-    return trackers;
   }
 
   /**
-   * Optional: search trackers by name / signature
+   * 🔎 Search trackers by name or signature
    */
   async searchTrackers(query: string): Promise<EtipTracker[]> {
     const all = await this.getAllTrackers();
     const q = query.toLowerCase();
 
     return all.filter((t) => {
-      const combined =
-        `${t.name} ${t.description ?? ''} ${t.code_signature ?? ''} ${
-          t.network_signature ?? ''
-        }`.toLowerCase();
+      const combined = `${t.name} ${t.description ?? ''}`
+        .toLowerCase();
       return combined.includes(q);
     });
   }

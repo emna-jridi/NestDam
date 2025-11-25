@@ -1,5 +1,3 @@
-// src/analysis/interfaces/tracker.interfaces.ts
-
 export interface TrackerAnalysis {
   id: number;
   name: string;
