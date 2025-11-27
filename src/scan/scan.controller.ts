@@ -1,230 +1,225 @@
+// src/scan/scan.controller.ts
 import {
   Controller,
   Post,
   Get,
-  Delete,
   Body,
   Param,
   Query,
-  Logger,
-  HttpException,
+  UseInterceptors,
+  UploadedFile,
   HttpStatus,
+  HttpException,
+  BadRequestException,
+  Delete,
+  Headers,
+  NotFoundException,
+  UseGuards,
+  Req,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { ScanService } from './scan.service';
-import { InstalledAppDto } from './dto/installed-apps.dto';
+import { AppRegistryService } from '../app-registry/app-registry.service';
+import { AnalyzeInstalledAppsDto } from './dto/installed-apps.dto';
+import { AnalyzeIosAppsDto } from './dto/ios-screenshot.dto';   
+import { ComparScansDto } from './dto/compare-scans.dto';
+import { GetScansQueryDto } from './dto/get-scans.dto';
+
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import * as fs from 'fs';
 
 @Controller('api/v1/scan')
 export class ScanController {
-  private readonly logger = new Logger(ScanController.name);
+  constructor(
+    private readonly scanService: ScanService,
+    private readonly appRegistryService: AppRegistryService,
+  ) {}
 
-  constructor(private readonly scanService: ScanService) {}
-
-  @Post('quick/android')
-  async quickScanAndroid(
-    @Body() body: { userHash: string; apps: InstalledAppDto[] },
-  ) {
-    this.logger.log(`Quick Android scan: ${body.apps.length} apps`);
-
+  // -------------------------
+  // ANDROID INSTALLED SCAN
+  // -------------------------
+  @Post('installed')
+  @UseGuards(JwtAuthGuard)
+  async scanInstalledApps(@Body() dto: AnalyzeInstalledAppsDto) {
     try {
-      return await this.scanService.scanAllApps(
-        body.userHash,
-        body.apps,
-        'android',
-      );
+      return await this.scanService.analyzeInstalledApps(dto.userHash, dto.apps);
     } catch (error) {
-      this.logger.error(`Quick Android scan failed: ${error.message}`);
       throw new HttpException(
-        'Quick scan failed',
+        'Failed to analyze installed apps',
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
   }
 
-  
-  @Post('quick/ios')
-  async quickScanIos(
-    @Body() body: { userHash: string; apps: InstalledAppDto[] },
-  ) {
-    this.logger.log(`Quick iOS scan: ${body.apps.length} apps`);
+  // -------------------------
+  // iOS SCAN (SCREENSHOT LIST)
+  // -------------------------
+  @Post('ios')
+  @UseGuards(JwtAuthGuard)
+  async scanIosApps(@Body() dto: AnalyzeIosAppsDto, @Req() req: any) {
+    const userHash =
+      dto.userHash || req.user?.userHash || req.user?.sub || 'anonymous';
 
     try {
-      return await this.scanService.scanAllApps(
-        body.userHash,
-        body.apps,
-        'ios',
-      );
+      // DTO FIXED: now dto.apps is IosAppDto[]
+      return await this.scanService.analyzeIosApps(userHash, dto.apps);
     } catch (error) {
-      this.logger.error(`Quick iOS scan failed: ${error.message}`);
       throw new HttpException(
-        'Quick scan failed',
+        'Failed to analyze iOS apps',
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
   }
 
-  /**
-   * ✅ MODE PROFOND : Analyse approfondie Android
-   */
-  @Post('deep/android')
-  async deepScanAndroid(
-    @Body() body: { userHash: string; app: InstalledAppDto },
-  ) {
-    this.logger.log(
-      `Deep Android scan: ${body.app.packageName}`,
-    );
+  // -------------------------
+  // APK UPLOAD + MOBSF
+  // -------------------------
+  @Post('apk')
+  @UseInterceptors(FileInterceptor('file'))
+  async scanApk(@UploadedFile() file: Express.Multer.File) {
+    if (!file) throw new BadRequestException('No file uploaded');
+
+    const tempPath = `/tmp/${Date.now()}_${file.originalname}`;
 
     try {
-      return await this.scanService.deepAnalyzeApp(
-        body.userHash,
-        body.app,
-        'android',
-      );
+      fs.writeFileSync(tempPath, file.buffer);
+      const result = await this.scanService.uploadApk(tempPath);
+
+      fs.unlinkSync(tempPath);
+      return result;
     } catch (error) {
-      this.logger.error(`Deep Android scan failed: ${error.message}`);
-      throw new HttpException(
-        'Deep scan failed',
-        HttpStatus.INTERNAL_SERVER_ERROR,
-      );
+      if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
+      throw new HttpException('APK scan failed', HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }
 
-  /**
-   * ✅ MODE PROFOND : Analyse approfondie iOS
-   */
-  @Post('deep/ios')
-  async deepScanIos(
-    @Body() body: { userHash: string; app: InstalledAppDto },
-  ) {
-    this.logger.log(`Deep iOS scan: ${body.app.packageName}`);
-
+  // -------------------------
+  // METADATA SCAN (internal use)
+  // -------------------------
+  @Post('metadata')
+  async scanMetadata(@Body() metadata: any) {
     try {
-      return await this.scanService.deepAnalyzeApp(
-        body.userHash,
-        body.app,
-        'ios',
-      );
+      return await this.scanService.analyzeMetadata(metadata);
     } catch (error) {
-      this.logger.error(`Deep iOS scan failed: ${error.message}`);
-      throw new HttpException(
-        'Deep scan failed',
-        HttpStatus.INTERNAL_SERVER_ERROR,
-      );
+      throw new HttpException('Metadata analysis failed', HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }
 
-  /**
-   * ✅ Obtenir un scan par ID
-   */
-  @Get(':scanId')
-  async getScan(@Param('scanId') scanId: string) {
-    this.logger.log(`Getting scan: ${scanId}`);
+  // -------------------------
+  // SEARCH
+  // -------------------------
+  @Get('search')
+  async search(@Query('query') query: string, @Query('limit') limit?: number) {
+    const q = query?.trim();
+    if (!q) throw new BadRequestException('Query parameter is required');
 
+    const searchLimit = limit || 20;
+
+    if (q.includes('.')) {
+      const app = await this.scanService.searchAppByPackage(q);
+      return { query: q, count: 1, results: [app] };
+    }
+
+    const results = await this.scanService.searchAppsByName(q, searchLimit);
+    return { query: q, count: results.length, results };
+  }
+
+  // -------------------------
+  // GET APP DETAILS
+  // -------------------------
+  @Get('app/:packageName')
+  async getAppDetails(@Param('packageName') packageName: string) {
     try {
-      const scan = await this.scanService.getScanById(scanId);
-
-      if (!scan) {
-        throw new HttpException('Scan not found', HttpStatus.NOT_FOUND);
-      }
-
-      return {
-        success: true,
-        data: scan,
-      };
+      return await this.scanService.searchAppByPackage(packageName);
     } catch (error) {
-      if (error instanceof HttpException) {
-        throw error;
-      }
-      this.logger.error(`Get scan failed: ${error.message}`);
-      throw new HttpException(
-        'Failed to get scan',
-        HttpStatus.INTERNAL_SERVER_ERROR,
-      );
+      throw new NotFoundException(`App not found: ${packageName}`);
     }
   }
 
-  /**
-   * ✅ Obtenir le dernier scan d'un utilisateur
-   */
+  // -------------------------
+  // LATEST SCAN
+  // -------------------------
   @Get('latest/:userHash')
   async getLatestScan(@Param('userHash') userHash: string) {
-    this.logger.log(`Getting latest scan for user: ${userHash}`);
-
     try {
       const scan = await this.scanService.getLatestScan(userHash);
-
-      if (!scan) {
-        throw new HttpException('No scans found', HttpStatus.NOT_FOUND);
-      }
-
-      return {
-        success: true,
-        data: scan,
-      };
+      if (!scan) return { success: true, data: null, message: 'No scans found' };
+      return { success: true, data: scan };
     } catch (error) {
-      if (error instanceof HttpException) {
-        throw error;
-      }
-      this.logger.error(`Get latest scan failed: ${error.message}`);
-      throw new HttpException(
-        'Failed to get latest scan',
-        HttpStatus.INTERNAL_SERVER_ERROR,
-      );
+      throw new BadRequestException(error.message);
     }
   }
 
-  /**
-   * ✅ Obtenir tous les scans d'un utilisateur
-   */
+  // -------------------------
+  // STATS
+  // -------------------------
+  @Get('stats/:userHash')
+  async getUserStatistics(@Param('userHash') userHash: string) {
+    try {
+      return { success: true, data: await this.scanService.getScanStatistics(userHash) };
+    } catch (error) {
+      throw new BadRequestException(error.message);
+    }
+  }
+
+  // -------------------------
+  // ALL USER SCANS
+  // -------------------------
   @Get('user/:userHash')
-  async getUserScans(
-    @Param('userHash') userHash: string,
-    @Query('limit') limit?: number,
-    @Query('skip') skip?: number,
-  ) {
-    this.logger.log(`Getting scans for user: ${userHash}`);
-
+  async getUserScans(@Param('userHash') userHash: string, @Query() query: GetScansQueryDto) {
     try {
-      const scans = await this.scanService.getUserScans(userHash, {
-        limit: limit ? parseInt(limit.toString()) : 10,
-        skip: skip ? parseInt(skip.toString()) : 0,
-      });
-
-      return {
-        success: true,
-        data: scans,
-      };
+      return { success: true, data: await this.scanService.getUserScans(userHash, query) };
     } catch (error) {
-      this.logger.error(`Get user scans failed: ${error.message}`);
-      throw new HttpException(
-        'Failed to get user scans',
-        HttpStatus.INTERNAL_SERVER_ERROR,
-      );
+      throw new BadRequestException(error.message);
     }
   }
 
-  /**
-   * ✅ Supprimer un scan
-   */
-  @Delete(':scanId')
-  async deleteScan(
-    @Param('scanId') scanId: string,
-    @Body('userHash') userHash: string,
+  // -------------------------
+  // GET SCAN BY ID
+  // -------------------------
+  @Get(':scanId')
+  async getScanById(@Param('scanId') scanId: string) {
+    try {
+      return { success: true, data: await this.scanService.getScanById(scanId) };
+    } catch (error) {
+      throw new NotFoundException(error.message);
+    }
+  }
+
+  // -------------------------
+  // COMPARE TWO SCANS
+  // -------------------------
+  @Post('compare')
+  async compareScans(
+    @Body() compareDto: ComparScansDto,
+    @Headers('x-user-hash') userHash?: string,
   ) {
-    this.logger.log(`Deleting scan: ${scanId}`);
+    if (!userHash) throw new BadRequestException('x-user-hash header is required');
 
     try {
-      await this.scanService.deleteScan(scanId, userHash);
-
       return {
         success: true,
-        message: 'Scan deleted successfully',
+        data: await this.scanService.compareScans(compareDto.scanId1, compareDto.scanId2, userHash),
       };
     } catch (error) {
-      this.logger.error(`Delete scan failed: ${error.message}`);
-      throw new HttpException(
-        'Failed to delete scan',
-        HttpStatus.INTERNAL_SERVER_ERROR,
-      );
+      throw new BadRequestException(error.message);
+    }
+  }
+
+  // -------------------------
+  // DELETE SCAN
+  // -------------------------
+  @Delete(':scanId')
+  async deleteScan(@Param('scanId') scanId: string, @Body('userHash') userHash: string) {
+    if (!userHash) throw new BadRequestException('userHash is required');
+
+    try {
+      return {
+        success: true,
+        data: await this.scanService.deleteScan(scanId, userHash),
+      };
+    } catch (error) {
+      throw new BadRequestException(error.message);
     }
   }
 }

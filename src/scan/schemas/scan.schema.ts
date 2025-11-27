@@ -1,55 +1,57 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { Document } from 'mongoose';
+import { HydratedDocument } from 'mongoose';
+
+export type ScanDocument = HydratedDocument<Scan>;
 
 @Schema({ timestamps: true })
-export class Scan extends Document {
+export class Scan {
   @Prop({ required: true })
-  type: string; // "apk" | "metadata" | "batch_installed" 
+  type: string; // 'batch_installed' | 'ios_screenshot' | 'apk' | 'metadata' ...
+
+  @Prop({ required: true })
+  userHash: string;
 
   @Prop()
-  userHash?: string;
+  platform?: 'android' | 'ios' | 'unknown';
 
-  @Prop()
-  packageName?: string;
-
-  @Prop()
-  fileName?: string;
-
-  @Prop()
-  score?: number;
-
-  @Prop()
-  totalApps?: number;
-
-  // Contient les résultats détaillés
-  @Prop({ type: Object })
-  report?: any;
+  @Prop({ required: true })
+  totalApps: number;
 
   @Prop({ type: Object })
-  summary?: {
-    avgScore?: number;
-    totalTrackers?: number;
-    totalAlerts?: number;
-    riskDistribution?: {
-      critical: number;
-      high: number;
-      medium: number;
-      low: number;
-    };
-    mostDangerousApps?: Array<{
-      packageName: string;
-      name: string;
-      score: number;
-    }>;
-  };
-
+  report: any;
+  @Prop({ type: Object })
+  summary: any;
+  @Prop()
   createdAt?: Date;
+
+  @Prop()
   updatedAt?: Date;
+
+
+  @Prop({
+    type: String,
+    default: 'BASIC_DONE',
+  })
+  status:
+    | 'PENDING'
+    | 'BASIC_DONE'
+    | 'DEEP_ANALYZING'
+    | 'COMPLETE';
+
+
+  @Prop({ type: Object })
+  deepAnalysis?: any;
+
+
+  @Prop({ type: Number, default: null })
+  finalScore?: number;
+
+
+  @Prop({ type: Date, default: null })
+  deepAnalysisRequestedAt?: Date;
+
+  @Prop({ type: Date, default: null })
+  deepAnalysisCompletedAt?: Date;
 }
 
 export const ScanSchema = SchemaFactory.createForClass(Scan);
-
-//  INDEXES pour performance
-ScanSchema.index({ userHash: 1, createdAt: -1 });
-ScanSchema.index({ type: 1 });
-ScanSchema.index({ packageName: 1 });

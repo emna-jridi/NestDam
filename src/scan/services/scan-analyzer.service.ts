@@ -10,6 +10,7 @@ import { RiskCalculatorService } from '../../analysis/risk-calculator.service';
 import { PermissionAnalyzerService } from '../../analysis/permission-analyzer.service';
 import { HeuristicDetectorService } from '../../analysis/heuristic-detector.service';
 import { EtipService } from '../../external-apis/etip.service';
+import { IosAppDto } from '../dto/ios-screenshot.dto';
 
 @Injectable()
 export class ScanAnalyzerService {
@@ -98,71 +99,75 @@ export class ScanAnalyzerService {
     }
   }
 
-  async analyzeIosApps(apps: InstalledAppDto[], etipTrackers: EtipTracker[]) {
+async analyzeIosApps(apps: IosAppDto[], etipTrackers: EtipTracker[]){
     const analyzed = await Promise.all(
       apps.map((app) => this.analyzeIosApp(app, etipTrackers)),
     );
 
     return analyzed;
   }
+private async analyzeIosApp(
+  app: IosAppDto,
+  etipTrackers: EtipTracker[],
+) {
+  const bundleId = app.bundleId;
+  const version = app.version || "unknown";
 
-  private async analyzeIosApp(
-    app: InstalledAppDto,
-    etipTrackers: EtipTracker[],
-  ) {
-    const packageName = app.packageName;
-    this.logger.debug(`Analyzing iOS app: ${packageName}`);
+  this.logger.debug(`Analyzing iOS app: ${bundleId}`);
 
-    try {
-      const dangerousPermissions: string[] = [];
-      const matchedTrackers = this.matchTrackersWithEtip(
-        packageName,
-        etipTrackers,
-      );
+  try {
+    const matchedTrackers = this.matchTrackersWithEtip(
+      bundleId,
+      etipTrackers,
+    );
 
-      const trackerNames = matchedTrackers.map((t) => t.name);
-      const heuristicFindings = this.heuristicDetector.detectIos({
-        name: app.name || packageName,
-      } as any); 
-  
-      const riskResult = this.riskCalculator.calculateRiskScore({
-        permissions: dangerousPermissions,
-        trackers: trackerNames,
-        isDebuggable: false,
-      });
+    const trackerNames = matchedTrackers.map((t) => t.name);
 
-      const riskLevel = this.riskCalculator.getRiskLevel(riskResult.score);
-      return {
-        packageName,
-        name: app.name || packageName,
-        version: app.version || 'unknown',
-        trackers: trackerNames,
-        trackerDetails: matchedTrackers.map((t) => ({
-          name: t.name,
-          description: t.description,
-          website: t.website,
-        })),
-        privacyScore: riskResult.score,
-        riskLevel,
-        riskBreakdown: riskResult.breakdown,
-        alerts: [...riskResult.alerts, ...heuristicFindings],
-      };
-    } catch (error) {
-      this.logger.error(
-        `Failed to analyze iOS app ${packageName}: ${error.message}`,
-        error.stack,
-      );
+    const heuristicFindings = this.heuristicDetector.detectIos({
+      name: app.name,
+      bundleId,
+      version,
+    });
 
-      return {
-        packageName,
-        name: app.name || packageName,
-        error: 'Analysis failed',
-        privacyScore: 50,
-        riskLevel: 'UNKNOWN',
-        alerts: [],
-      };
-    }
+    const riskResult = this.riskCalculator.calculateRiskScore({
+      permissions: [],
+      trackers: trackerNames,
+      isDebuggable: false,
+    });
+
+    const riskLevel = this.riskCalculator.getRiskLevel(riskResult.score);
+
+    return {
+      packageName: bundleId,
+      name: app.name,
+      version,
+      trackers: trackerNames,
+      trackerDetails: matchedTrackers.map((t) => ({
+        name: t.name,
+        description: t.description,
+        website: t.website,
+      })),
+      privacyScore: riskResult.score,
+      riskLevel,
+      riskBreakdown: riskResult.breakdown,
+      alerts: [...riskResult.alerts, ...heuristicFindings],
+    };
+  } catch (error) {
+    this.logger.error(
+      `Failed to analyze iOS app ${bundleId}: ${error.message}`,
+      error.stack,
+    );
+
+    return {
+      packageName: bundleId,
+      name: app.name,
+      error: 'Analysis failed',
+      privacyScore: 50,
+      riskLevel: 'UNKNOWN',
+      alerts: [],
+    };
   }
+}
 
 
   private matchTrackersWithEtip(

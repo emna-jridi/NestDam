@@ -7,18 +7,10 @@ export class IosAppDto {
   name: string;
 
   @IsString()
-  version: string;  
+  version: string;
 
   @IsString()
-  bundleId: string;  
-
-  @IsOptional()
-  @IsArray()
-  permissions?: string[];
-
-  @IsOptional()
-  @IsArray()
-  trackers?: string[];
+  bundleId: string;
 
   @IsOptional()
   @IsString()
