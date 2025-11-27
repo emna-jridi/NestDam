@@ -14,7 +14,7 @@ import { AvatarModule } from './avatar/avatar.module';
 import { GoogleModule } from './google/google.module';
 import { ConfigModule } from '@nestjs/config';
 import { AlertsModule } from './alerts/alerts.module';
-
+import { ReportModule } from './report/report.module'; // 👈 Import this
 @Module({
   imports: [
 
@@ -41,7 +41,7 @@ import { AlertsModule } from './alerts/alerts.module';
     AvatarModule,
     GoogleModule,
     AlertsModule,
-
+    ReportModule,
   ],
   controllers: [],
   providers: [],
