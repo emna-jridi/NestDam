@@ -1,4 +1,4 @@
-// src/scan/dto/ios-scan.dto.ts
+
 import { IsArray, IsOptional, IsString, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
 
@@ -6,9 +6,19 @@ export class IosAppDto {
   @IsString()
   name: string;
 
-  @IsOptional()
   @IsString()
-  bundleId?: string;
+  version: string;  
+
+  @IsString()
+  bundleId: string;  
+
+  @IsOptional()
+  @IsArray()
+  permissions?: string[];
+
+  @IsOptional()
+  @IsArray()
+  trackers?: string[];
 
   @IsOptional()
   @IsString()

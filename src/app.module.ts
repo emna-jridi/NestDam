@@ -14,6 +14,7 @@ import { AvatarModule } from './avatar/avatar.module';
 import { GoogleModule } from './google/google.module';
 import { ConfigModule } from '@nestjs/config';
 import { RedisModule } from './redis/redis.module';
+import { WebhookModule } from './webhook/webhook.module';
 @Module({
   imports: [
 
@@ -40,6 +41,7 @@ import { RedisModule } from './redis/redis.module';
     AvatarModule,
     GoogleModule,
     RedisModule,
+    WebhookModule,
   ],
   controllers: [],
   providers: [],

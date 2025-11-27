@@ -1,0 +1,121 @@
+{
+  "name": "ShadowGuard Deep Analysis",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "shadowguard-deep-analysis",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [240, 300],
+      "webhookId": "shadowguard-deep"
+    },
+    {
+      "parameters": {
+        "jsCode": "const scanId = $input.item.json.scanId;\nconst context = $input.item.json.context;\n\nreturn [{\n  json: {\n    scanId,\n    packageName: context.packageName,\n    platform: context.platform,\n    permissions: context.permissions || [],\n    appName: context.appName || context.packageName,\n    category: context.category || 'Unknown',\n    installs: context.installs || 'Unknown'\n  }\n}];"
+      },
+      "id": "extract-context",
+      "name": "Extract Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"success\": true, \"message\": \"Analysis started\", \"scanId\": $json.scanId } }}"
+      },
+      "id": "respond-webhook",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:3000/api/v1/tracker-detection/analyze-deep",
+        "authentication": "none",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  packageName: $json.packageName,\n  platform: $json.platform,\n  permissions: $json.permissions,\n  appName: $json.appName,\n  category: $json.category,\n  installs: $json.installs\n}) }}",
+        "options": {}
+      },
+      "id": "call-backend",
+      "name": "Call Backend AI",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:3000/api/v1/webhook/deep-analysis-result",
+        "authentication": "none",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  scanId: $('Extract Context').first().json.scanId,\n  result: $json\n}) }}",
+        "options": {}
+      },
+      "id": "callback-backend",
+      "name": "Callback Backend",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1120, 300]
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Extract Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Context": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Call Backend AI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call Backend AI": {
+      "main": [
+        [
+          {
+            "node": "Callback Backend",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 0,
+  "updatedAt": "2025-01-01T00:00:00.000Z",
+  "versionId": "1"
+}

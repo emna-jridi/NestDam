@@ -13,6 +13,9 @@ import { ScanAnalyzerService } from './services/scan-analyzer.service';
 import { ScanComparisonService } from './services/scan-comparison.service';
 import { ScanStatisticsService } from './services/scan-statistics.service';
 import { ScanSummaryService } from './services/scan-summary.service';
+import { ScoreAggregatorService } from 'src/analysis/score-aggregator.service';
+import { TrackerDetectionModule } from '../external-apis/tracker-detection/tracker-detection.module';
+
 @Module({
   imports: [
     MongooseModule.forFeature([
@@ -22,6 +25,7 @@ import { ScanSummaryService } from './services/scan-summary.service';
     ExternalApisModule,
     AppRegistryModule,
     AnalysisModule,
+    TrackerDetectionModule
   ],
   controllers: [ScanController],
   providers: [
@@ -32,6 +36,7 @@ import { ScanSummaryService } from './services/scan-summary.service';
     ScanSummaryService,
     PermissionAnalyzerService,
     HeuristicDetectorService,
+    ScoreAggregatorService
   ],
   exports: [ScanService],
 })
