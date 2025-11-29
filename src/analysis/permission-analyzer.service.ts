@@ -1,5 +1,6 @@
 
 import { Injectable, Logger } from '@nestjs/common';
+import { DANGEROUS_PERMISSIONS } from 'src/scan/shared/constants/permissions.constants';
 
 export interface PermissionAnalysis {
   permission: string;
@@ -16,9 +17,8 @@ export interface PermissionAnalysis {
 export class PermissionAnalyzerService {
   private readonly logger = new Logger(PermissionAnalyzerService.name);
 
-  // Base de données des permissions Android avec leur niveau de risque
   private readonly permissionsDatabase = {
-    // CRITICAL (Score: 90-100)
+    
     'android.permission.READ_SMS': {
       displayName: 'Lire les SMS',
       category: 'Communication',
@@ -244,9 +244,6 @@ export class PermissionAnalyzerService {
     },
   };
 
-  /**
-   * Analyser une liste de permissions
-   */
   analyzePermissions(
     permissions: string[],
     appCategory?: string,
@@ -270,8 +267,6 @@ export class PermissionAnalyzerService {
       const analysis = this.analyzePermission(permission, appCategory);
       analyses.push(analysis);
       totalScore += analysis.riskScore;
-
-      // Compter par niveau de risque
       if (analysis.riskLevel === 'CRITICAL') summary.critical++;
       else if (analysis.riskLevel === 'HIGH') summary.high++;
       else if (analysis.riskLevel === 'MEDIUM') summary.medium++;
@@ -289,9 +284,6 @@ export class PermissionAnalyzerService {
     };
   }
 
-  /**
-   * Analyser une permission individuelle
-   */
   private analyzePermission(
     permission: string,
     appCategory?: string,
@@ -310,7 +302,6 @@ export class PermissionAnalyzerService {
       };
     }
 
-    // Permission inconnue
     this.logger.warn(`Unknown permission: ${permission}`);
     return {
       permission,
@@ -323,14 +314,11 @@ export class PermissionAnalyzerService {
     };
   }
 
-  /**
-   * Vérifier si une permission est justifiée pour une catégorie d'app
-   */
+ 
   private isPermissionJustified(permission: string, category?: string): boolean {
-    if (!category) return true; // On ne peut pas juger sans contexte
+    if (!category) return true; 
 
     const justifications = {
-      // Apps de communication
       Communication: [
         'android.permission.READ_CONTACTS',
         'android.permission.CAMERA',
@@ -343,8 +331,6 @@ export class PermissionAnalyzerService {
         'android.permission.INTERNET',
         'android.permission.ACCESS_FINE_LOCATION',
       ],
-
-      // Apps photo/vidéo
       Photography: [
         'android.permission.CAMERA',
         'android.permission.READ_EXTERNAL_STORAGE',
@@ -354,28 +340,22 @@ export class PermissionAnalyzerService {
         'android.permission.READ_EXTERNAL_STORAGE',
         'android.permission.WRITE_EXTERNAL_STORAGE',
       ],
-
-      // Apps de navigation
       'Maps & Navigation': [
         'android.permission.ACCESS_FINE_LOCATION',
         'android.permission.ACCESS_COARSE_LOCATION',
         'android.permission.ACCESS_BACKGROUND_LOCATION',
       ],
 
-      // Apps météo
       Weather: [
         'android.permission.ACCESS_FINE_LOCATION',
         'android.permission.INTERNET',
       ],
-
-      // Apps de santé
       'Health & Fitness': [
         'android.permission.ACCESS_FINE_LOCATION',
         'android.permission.BLUETOOTH',
         'android.permission.BLUETOOTH_CONNECT',
       ],
 
-      // Apps de jeux (minimal)
       Games: [
         'android.permission.INTERNET',
         'android.permission.VIBRATE',
@@ -392,9 +372,6 @@ export class PermissionAnalyzerService {
     return allowedPerms.includes(permission);
   }
 
-  /**
-   * Obtenir la justification d'une permission
-   */
   private getJustification(permission: string, category?: string): string {
     const justifications = {
       'android.permission.CAMERA': {
@@ -415,10 +392,6 @@ export class PermissionAnalyzerService {
 
     return justifications[permission]?.[category] || 'Permission justifiée';
   }
-
-  /**
-   * Formater le nom d'une permission pour l'affichage
-   */
   private formatPermissionName(permission: string): string {
     return permission
       .replace('android.permission.', '')
@@ -427,26 +400,29 @@ export class PermissionAnalyzerService {
       .replace(/\b\w/g, l => l.toUpperCase());
   }
 
-  /**
-   * Obtenir les permissions dangereuses uniquement
-   */
   getDangerousPermissions(permissions: string[]): string[] {
     return permissions.filter(perm => {
       const data = this.permissionsDatabase[perm];
       return data && (data.riskLevel === 'HIGH' || data.riskLevel === 'CRITICAL');
     });
   }
+  isDangerousPermission(permission: string): boolean {
+  const permData = this.permissionsDatabase[permission];
+  if (permData) {
+    return permData.riskLevel === 'HIGH' || permData.riskLevel === 'CRITICAL';
+  }
+  const permName = permission
+    .replace('android.permission.', '')
+    .toUpperCase();
 
-  /**
-   * Calculer un score de risque global basé sur les permissions
-   */
+  return DANGEROUS_PERMISSIONS.includes(permName);
+}
+
   calculatePermissionRiskScore(permissions: string[]): number {
     if (permissions.length === 0) return 100; // Aucune permission = sûr
 
     const analysis = this.analyzePermissions(permissions);
     const avgScore = analysis.totalScore / permissions.length;
-
-    // Score inversé : plus de permissions dangereuses = score plus bas
     return Math.max(0, 100 - avgScore);
   }
 }

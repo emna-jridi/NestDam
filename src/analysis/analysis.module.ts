@@ -1,13 +1,12 @@
-
 import { Module } from '@nestjs/common';
 import { RiskCalculatorService } from './risk-calculator.service';
 import { PermissionAnalyzerService } from './permission-analyzer.service';
-import { TrackerDetectorService } from './tracker-detector.service';
 import { MongooseModule } from '@nestjs/mongoose';
 import { Tracker, TrackerSchema } from '../app-registry/schemas/tracker.schema';
+import { HeuristicDetectorService } from './heuristic-detector.service';
 
 @Module({
-    imports: [
+  imports: [
     MongooseModule.forFeature([
       { name: Tracker.name, schema: TrackerSchema },
     ]),
@@ -15,12 +14,12 @@ import { Tracker, TrackerSchema } from '../app-registry/schemas/tracker.schema';
   providers: [
     RiskCalculatorService,
     PermissionAnalyzerService,
-    TrackerDetectorService,
+    HeuristicDetectorService,
   ],
   exports: [
     RiskCalculatorService,
     PermissionAnalyzerService,
-    TrackerDetectorService,
+    HeuristicDetectorService,
   ],
 })
 export class AnalysisModule {}
