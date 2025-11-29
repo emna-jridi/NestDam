@@ -3,8 +3,7 @@ import { Type } from 'class-transformer';
 
 export class SearchAppDto {
   @IsString()
-  query: string; // Nom de l'app ou package name
-
+  query: string; 
   @IsOptional()
   @IsString()
   category?: string;

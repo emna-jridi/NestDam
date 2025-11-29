@@ -14,10 +14,10 @@ export class Permission extends Document {
   name: string; // android.permission.CAMERA
 
   @Prop()
-  displayName: string;
+  displayName: string; 
 
   @Prop()
-  category: string;
+  category: string; 
   @Prop()
   description: string;
 
@@ -25,7 +25,7 @@ export class Permission extends Document {
   riskLevel: PermissionRiskLevel;
 
   @Prop({ min: 0, max: 100 })
-  riskScore: number; // Impact sur le score global
+  riskScore: number; 
 }
 
 export const PermissionSchema = SchemaFactory.createForClass(Permission);

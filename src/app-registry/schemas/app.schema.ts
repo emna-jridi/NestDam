@@ -1,12 +1,14 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { HydratedDocument } from 'mongoose';
+import { HydratedDocument } from 'mongoose'; 
+
+export type AppDocument = HydratedDocument<App>;
 
 @Schema({ timestamps: true })
 export class App {
-  @Prop({ required: true, unique: true })
+  @Prop({ required: true, unique: true, index: true })
   packageName: string;
 
-  @Prop({ required: true })
+  @Prop({ required: true, index: 'text' })
   name: string;
 
   @Prop()
@@ -24,19 +26,26 @@ export class App {
   @Prop()
   description: string;
 
-  // Scores
-  @Prop({ default: 50, min: 0, max: 100 })
-  privacyScore: number;
+  @Prop()
+  rating: number;
 
-  @Prop({ default: 0 })
-  communityScore: number;
+  @Prop()
+  installs: string;
 
-  // Métadonnées
   @Prop({ type: [String], default: [] })
   permissions: string[];
 
   @Prop({ type: [String], default: [] })
   trackers: string[];
+
+  @Prop({ default: 50 })
+  privacyScore: number;
+
+  @Prop({ default: 'UNKNOWN' })
+  riskLevel: string;
+
+  @Prop()
+  communityScore: number;
 
   @Prop({ default: false })
   isDebuggable: boolean;
@@ -45,28 +54,20 @@ export class App {
   playStoreData: any;
 
   @Prop({ type: Object })
-  exodusData: any;
-
-  @Prop({ type: Object })
   mobsfData: any;
-
-  // Stats
-  @Prop({ default: 0 })
-  scanCount: number;
 
   @Prop()
   lastScanned: Date;
 
   @Prop({ default: Date.now })
   lastUpdated: Date;
+
+  @Prop({ default: 0 })
+  scanCount: number;
 }
 
 export const AppSchema = SchemaFactory.createForClass(App);
 
-// Use HydratedDocument for proper typing
-export type AppDocument = HydratedDocument<App>;
-
-// Index pour recherche rapide
-AppSchema.index({ packageName: 1 });
-AppSchema.index({ name: 'text', developer: 'text' });
-AppSchema.index({ privacyScore: -1 });
+AppSchema.index({ name: 'text', packageName: 'text', developer: 'text' });
+AppSchema.index({ privacyScore: 1 });
+AppSchema.index({ riskLevel: 1 });
