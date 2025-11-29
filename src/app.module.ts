@@ -16,6 +16,7 @@ import { AppService } from './app.service';
 import { DevicesModule } from './devices/devices.module';
 import { LeakcheckModule } from './leakcheck/leakcheck.module';
 import { PrivacyTipsModule } from './privacy-tips/privacy-tips.module';
+import { RedisModule } from './redis/redis.module';
 
 @Module({
   imports: [
@@ -41,6 +42,7 @@ import { PrivacyTipsModule } from './privacy-tips/privacy-tips.module';
     DevicesModule,
     LeakcheckModule,
     PrivacyTipsModule,
+    RedisModule,
   ],
   controllers: [AppController],
   providers: [AppService],
