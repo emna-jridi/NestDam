@@ -1,4 +1,5 @@
 // scripts/seed-trackers.ts
+/*
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from '../src/app.module';
 import { ExodusPrivacyService } from '../src/external-apis/exodus-privacy.service';
@@ -19,17 +20,17 @@ interface ExodusTracker {
 
 async function bootstrap() {
   const app = await NestFactory.createApplicationContext(AppModule);
-
+  
   const exodusService = app.get(ExodusPrivacyService);
   const trackerModel = app.get<Model<Tracker>>('TrackerModel');
-
+  
   console.log('📥 Fetching trackers from Exodus Privacy...');
-
-  const trackers = await exodusService.getAllTrackers();
+  
+  const trackers = await exodusService.getTrackers();
   const trackerArray = Object.values(trackers) as ExodusTracker[];
-
+  
   console.log(`Found ${trackerArray.length} trackers`);
-
+  
   for (const tracker of trackerArray) {
     await trackerModel.findOneAndUpdate(
       { name: tracker.name },
@@ -42,10 +43,10 @@ async function bootstrap() {
         exodusId: tracker.id,
         privacyImpact: calculatePrivacyImpact(tracker),
       },
-      { upsert: true, new: true },
+      { upsert: true, new: true }
     );
   }
-
+  
   console.log('✅ Trackers seeded successfully!');
   await app.close();
 }
@@ -61,4 +62,4 @@ function calculatePrivacyImpact(tracker: ExodusTracker): number {
 bootstrap().catch((error) => {
   console.error('❌ Error seeding trackers:', error);
   process.exit(1);
-});
+});*/
