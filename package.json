@@ -20,9 +20,15 @@
     "test:e2e": "jest --config ./test/jest-e2e.json"
   },
   "dependencies": {
+<<<<<<< HEAD
     "@nestjs-modules/mailer": "^2.0.2",
     "@nestjs/axios": "^4.0.1",
     "@nestjs/cache-manager": "^3.0.1",
+=======
+    "@google/generative-ai": "^0.24.1",
+    "@nestjs-modules/mailer": "^2.0.2",
+    "@nestjs/axios": "^4.0.1",
+>>>>>>> origin/report
     "@nestjs/common": "^11.1.8",
     "@nestjs/config": "^4.0.2",
     "@nestjs/core": "^11.1.8",
@@ -34,19 +40,30 @@
     "@nestjs/throttler": "^6.4.0",
     "axios": "^1.13.2",
     "bcrypt": "^6.0.0",
+<<<<<<< HEAD
     "cache-manager": "^7.2.5",
     "cache-manager-ioredis": "^2.1.0",
     "cache-manager-redis-store": "^3.0.1",
+=======
+>>>>>>> origin/report
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.2",
     "date-fns": "^4.1.0",
     "dotenv": "^17.2.3",
+<<<<<<< HEAD
+=======
+    "firebase-admin": "^13.6.0",
+>>>>>>> origin/report
     "form-data": "^4.0.4",
     "google-auth-library": "^10.5.0",
     "google-play-scraper": "^10.1.1",
     "helmet": "^8.1.0",
+<<<<<<< HEAD
     "ioredis": "^5.8.2",
     "mongoose": "^8.19.3",
+=======
+    "mongoose": "^8.20.0",
+>>>>>>> origin/report
     "multer": "^2.0.2",
     "nanoid": "^5.1.6",
     "nodemailer": "^7.0.10",

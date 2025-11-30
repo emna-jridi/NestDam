@@ -13,7 +13,12 @@ import { AnalysisModule } from './analysis/analysis.module';
 import { AvatarModule } from './avatar/avatar.module';
 import { GoogleModule } from './google/google.module';
 import { ConfigModule } from '@nestjs/config';
+<<<<<<< HEAD
 import { RedisModule } from './redis/redis.module';
+=======
+import { AlertsModule } from './alerts/alerts.module';
+import { ReportModule } from './report/report.module'; // 👈 Import this
+>>>>>>> origin/report
 @Module({
   imports: [
 
@@ -29,7 +34,11 @@ import { RedisModule } from './redis/redis.module';
       secret: 'your-secret-key-change-in-production',
       signOptions: { expiresIn: '15m' },
     }),
+<<<<<<< HEAD
     RedisModule,
+=======
+    
+>>>>>>> origin/report
     UsersModule,
     AuthModule,
     MailModule,
@@ -39,7 +48,12 @@ import { RedisModule } from './redis/redis.module';
     AnalysisModule,
     AvatarModule,
     GoogleModule,
+<<<<<<< HEAD
     RedisModule,
+=======
+    AlertsModule,
+    ReportModule,
+>>>>>>> origin/report
   ],
   controllers: [],
   providers: [],

@@ -12,5 +12,9 @@ export class GoogleLoginDto {
   @IsString()
   @IsNotEmpty({ message: 'ID Token Google est requis' })
   idToken: string;
+<<<<<<< HEAD
 }
 
+=======
+}
+>>>>>>> origin/report

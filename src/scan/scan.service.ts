@@ -12,10 +12,13 @@ import { TrackerDetectorService } from 'src/analysis/tracker-detector.service';
 import { Tracker } from 'src/app-registry/schemas/tracker.schema';
 import { ComparisonResultDto } from './dto/compare-scans.dto';
 import { GetScansQueryDto, GetScansResponseDto, SortOrder } from './dto/get-scans.dto';
+<<<<<<< HEAD
 import { EtipService } from 'src/external-apis/etip.service';
 import { log } from 'console';
 import { EtipTracker } from 'src/external-apis/interfaces/etip-tracker.interface';
 import { IosAppDto } from './dto/ios-screenshot.dto';
+=======
+>>>>>>> origin/report
 
 @Injectable()
 export class ScanService {
@@ -30,6 +33,7 @@ export class ScanService {
     private exodusService: ExodusService,
     private appRegistryService: AppRegistryService,
     private riskCalculator: RiskCalculatorService,
+<<<<<<< HEAD
     private etipService: EtipService,
   ) { }
 
@@ -52,6 +56,23 @@ async analyzeInstalledApps(userHash: string, apps: InstalledAppDto[]) {
       const summary = this.generateSummary(results);
 
       // 4) Save scan in Mongo
+=======
+  ) { }
+
+  // -------------------------------------------------------------
+  //  MAIN ENTRY : ANALYZE INSTALLED APPS FROM MOBILE - ✅ CORRIGÉ
+  // -------------------------------------------------------------
+  async analyzeInstalledApps(userHash: string, apps: InstalledAppDto[]) {
+
+    try {
+      const allTrackers = await this.trackerModel.find().exec();
+      const results = await Promise.all(
+        apps.map(app => this.analyzeInstalledAppWithDetection(app, allTrackers))
+      );
+
+      const summary = this.generateSummary(results);
+
+>>>>>>> origin/report
       const scan = await this.scanModel.create({
         type: 'batch_installed',
         userHash,
@@ -62,7 +83,10 @@ async analyzeInstalledApps(userHash: string, apps: InstalledAppDto[]) {
         summary,
       });
 
+<<<<<<< HEAD
       // 5) Return response to mobile
+=======
+>>>>>>> origin/report
       return {
         scanId: scan.id.toString(),
         userHash,
@@ -71,14 +95,20 @@ async analyzeInstalledApps(userHash: string, apps: InstalledAppDto[]) {
         summary,
         createdAt: scan.createdAt,
       };
+<<<<<<< HEAD
     } catch (error: any) {
       this.logger.error('Failed to analyze installed apps', error.stack);
+=======
+
+    } catch (error) {
+>>>>>>> origin/report
       throw new Error(`Failed to analyze installed apps: ${error.message}`);
     }
   }
 
 
   // -------------------------------------------------------------
+<<<<<<< HEAD
   //  Analyze ONE single installed app - 
   // -------------------------------------------------------------
   private async analyzeInstalledAppWithDetection(
@@ -379,6 +409,79 @@ async analyzeInstalledApps(userHash: string, apps: InstalledAppDto[]) {
 
   // -------------------------------------------------------------
   //  SUMMARY GENERATOR
+=======
+  // ⭐ Analyze ONE single installed app - ✅ CORRIGÉ
+  // -------------------------------------------------------------
+  private async analyzeInstalledAppWithDetection(
+    appDto: InstalledAppDto,
+    allTrackers: Tracker[]
+  ) {
+    try {
+      const app = await this.appRegistryService.getOrCreateApp(appDto.packageName);
+
+      const mobileTrackers: string[] = appDto.trackers || [];
+
+      const detectedTrackerObjects = this.trackerDetector.detectTrackers(appDto, allTrackers);
+      const detectorTrackers: string[] = detectedTrackerObjects.map(t => t.name).filter(Boolean);
+      const exodusTrackers: string[] = await this.exodusService.getTrackers(appDto.packageName);
+
+      const dbTrackers: string[] = app.trackers || [];
+
+      const mergedSet = new Set<string>([
+        ...dbTrackers,
+        ...exodusTrackers,
+        ...detectorTrackers,
+        ...mobileTrackers
+      ]);
+      const finalTrackers = Array.from(mergedSet);
+      app.trackers = finalTrackers;
+
+      const riskResult = this.riskCalculator.calculateRiskScore({
+        permissions: appDto.permissions,
+        trackers: finalTrackers,
+        isDebuggable: appDto.isDebuggable || app.isDebuggable || false,
+        communityScore: app.communityScore,
+      });
+
+      app.isDebuggable = appDto.isDebuggable ?? app.isDebuggable;
+      app.scanCount += 1;
+      app.lastScanned = new Date();
+      app.privacyScore = riskResult.score;
+
+      await app.save();
+
+      return {
+        packageName: appDto.packageName,
+        name: app.name,
+        version: appDto.version,
+        score: riskResult.score,
+        riskLevel: this.riskCalculator.getRiskLevel(riskResult.score),
+        alerts: riskResult.alerts,
+        breakdown: riskResult.breakdown,
+        trackers: finalTrackers,
+        permissions: {
+          dangerous: riskResult.breakdown['permissions']?.list || [],
+          total: appDto.permissions.length,
+        },
+      };
+
+    } catch (error) {
+      return {
+        packageName: appDto.packageName,
+        name: appDto.name || 'Unknown',
+        score: 0,
+        riskLevel: 'UNKNOWN',
+        error: 'Analysis failed',
+        trackers: [],
+        permissions: { dangerous: [], total: 0 },
+        alerts: [],
+      };
+    }
+  }
+
+  // -------------------------------------------------------------
+  // ⭐ SUMMARY GENERATOR
+>>>>>>> origin/report
   // -------------------------------------------------------------
   private generateSummary(results: any[]) {
     const valid = results.filter(r => !r.error);
@@ -410,7 +513,26 @@ async analyzeInstalledApps(userHash: string, apps: InstalledAppDto[]) {
     };
   }
 
+<<<<<<< HEAD
 
+=======
+  private getDangerousPermissions(list: string[]) {
+    const dangerous = [
+      'android.permission.READ_SMS',
+      'android.permission.SEND_SMS',
+      'android.permission.READ_CONTACTS',
+      'android.permission.WRITE_CONTACTS',
+      'android.permission.RECORD_AUDIO',
+      'android.permission.CAMERA',
+      'android.permission.ACCESS_FINE_LOCATION',
+      'android.permission.ACCESS_COARSE_LOCATION',
+      'android.permission.READ_CALL_LOG',
+      'android.permission.WRITE_CALL_LOG',
+    ];
+
+    return list.filter(p => dangerous.includes(p));
+  }
+>>>>>>> origin/report
   private hasUnknownTrackers(trackers: string[]) {
     // Later: compare to known trackers list
     return false;
@@ -914,6 +1036,7 @@ async analyzeInstalledApps(userHash: string, apps: InstalledAppDto[]) {
       throw new Error(`Failed to get statistics: ${error.message}`);
     }
   }
+<<<<<<< HEAD
 // -------------------------------------------------------------
 //  iOS: ANALYZE APPS FROM SCREENSHOT
 // -------------------------------------------------------------
@@ -1225,4 +1348,6 @@ private detectIosHeuristicsMinimal(app: IosAppDto, matchedTrackers: EtipTracker[
   return findings;
 }
 
+=======
+>>>>>>> origin/report
 }
