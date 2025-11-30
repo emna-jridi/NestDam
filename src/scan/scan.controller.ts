@@ -29,10 +29,7 @@ import { ExodusService } from 'src/external-apis/exodus.service';
 import { ComparScansDto } from './dto/compare-scans.dto';
 import { GetScansQueryDto } from './dto/get-scans.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-<<<<<<< HEAD
 import { AnalyzeIosAppsDto } from './dto/ios-screenshot.dto';
-=======
->>>>>>> origin/report
 
 @Controller('api/v1/scan')
 export class ScanController {
@@ -43,19 +40,11 @@ export class ScanController {
 
   ) { }
 
-<<<<<<< HEAD
   //  NOUVEAU : Analyser les apps installées depuis le mobile
-=======
-  // ⭐ NOUVEAU : Analyser les apps installées depuis le mobile
->>>>>>> origin/report
   @Post('installed')
   @UseGuards(JwtAuthGuard)
   async scanInstalledApps(@Body() dto: AnalyzeInstalledAppsDto ){
     const userHash = dto.userHash; 
-<<<<<<< HEAD
-=======
-
->>>>>>> origin/report
     try {
       return await this.scanService.analyzeInstalledApps(userHash, dto.apps);
     } catch (error) {
@@ -368,7 +357,6 @@ async getUserScanHistory(
    };
 }
 
-<<<<<<< HEAD
   @Post('ios')
   @UseGuards(JwtAuthGuard)
   async scanIosApps(@Body() dto: AnalyzeIosAppsDto, @Req() req: any) {
@@ -378,6 +366,4 @@ async getUserScanHistory(
     return this.scanService.analyzeIosApps(userHash, dto.apps);
   }
 
-=======
->>>>>>> origin/report
 }

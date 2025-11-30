@@ -21,15 +21,9 @@ async function bootstrap() {
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api', app, document);
 
-<<<<<<< HEAD
   await app.listen(3000, '0.0.0.0');
   console.log('🚀 Server: http://localhost:3000');
   console.log('📚 Swagger: http://localhost:3000/api');
   console.log('📱 Mobile: http://192.168.137.162:3000');
-=======
-  await app.listen(3000, '0.0.0.0'); // listen on all interfaces
-  console.log('🚀 Server: http://localhost:3000');
-  console.log('📚 Swagger: http://localhost:3000/api');
->>>>>>> origin/report
 }
 bootstrap();
