@@ -17,14 +17,14 @@ export class ReportService {
   ];
 
   constructor() {
-    // 👇 PASTE YOUR NEW KEY HERE (The one you just created)
+    // 👇 YOUR API KEY
     const API_KEY = 'AIzaSyBkpXuI49UaRRyxp_1JU3vh3rn5AkmfOGA'; 
 
-    if (API_KEY && API_KEY == 'AIzaSyBkpXuI49UaRRyxp_1JU3vh3rn5AkmfOGA') {
+    if (API_KEY && API_KEY.startsWith('AIza')) {
       this.genAI = new GoogleGenerativeAI(API_KEY);
       this.logger.log('✨ Gemini AI Client Ready');
     } else {
-      this.logger.warn('⚠️ No API Key found. Using Local Engine.');
+      this.logger.warn('⚠️ No valid API Key found. Defaulting to Local Engine.');
     }
   }
 
@@ -33,19 +33,23 @@ export class ReportService {
     if (this.genAI) {
       for (const modelName of this.MODELS_TO_TRY) {
         try {
+          // this.logger.log(`🔄 Attempting AI scan with model: ${modelName}`);
           return await this.analyzeWithAI(packageName, modelName);
         } catch (error) {
-          // If 404 or error, just log warning and continue loop
+          // If 404 or error, just log warning and continue loop to next model
           this.logger.warn(`❌ Model ${modelName} failed. Trying next...`);
         }
       }
       this.logger.error('⚠️ All AI models failed. Switching to Local Engine.');
     }
     
-    // 2. Fallback to Local Engine if all AI attempts fail
+    // 2. Fallback to Local Engine (Static Logic)
     return this.analyzeLocally(packageName);
   }
 
+  // ==========================================
+  // 🧠 OPTION A: THE AI ENGINE
+  // ==========================================
   private async analyzeWithAI(packageName: string, modelName: string): Promise<ReportDto> {
     const model = this.genAI.getGenerativeModel({ model: modelName });
 
@@ -71,7 +75,7 @@ export class ReportService {
     const response = await result.response;
     let text = response.text();
 
-    // Cleanup: Remove any markdown wrapping
+    // Cleanup: Remove any markdown wrapping or code blocks
     text = text.replace(/```json/g, '').replace(/```/g, '').trim();
     
     const data = JSON.parse(text);
@@ -87,27 +91,69 @@ export class ReportService {
     };
   }
 
+  // ==========================================
+  // 🛠️ OPTION B: THE STATIC LOCAL ENGINE (Backup)
+  // ==========================================
   private analyzeLocally(packageName: string): ReportDto {
-    this.logger.log(`🔍 Local Scanning: ${packageName}`);
+    this.logger.log(`🔍 Local Scanning (Fallback): ${packageName}`);
     
     const report = new ReportDto();
     report.packageName = packageName;
     report.lastUpdate = new Date().toISOString();
-    report.appName = packageName.split('.').pop() || 'Unknown App'; 
+    
+    // Clean up name: "com.facebook.katana" -> "Facebook"
+    const namePart = packageName.split('.').pop() || 'Unknown App'; 
+    report.appName = namePart.charAt(0).toUpperCase() + namePart.slice(1);
 
-    if (packageName.includes('social') || packageName.includes('facebook')) {
-      report.riskLevel = 'Medium';
-      report.dataPrivacy = 'Likely collects contacts and location.';
-      report.recommendations = ['Check privacy settings', 'Limit background data'];
-    } else if (packageName.includes('bank')) {
+    // 1. Detect Category by Keywords
+    if (packageName.includes('bank') || packageName.includes('wallet') || packageName.includes('pay')) {
       report.riskLevel = 'High';
-      report.dataPrivacy = 'Financial data involved.';
-      report.recommendations = ['Enable Biometrics', 'Never share OTPs'];
-    } else {
-      report.riskLevel = 'Low';
-      report.dataPrivacy = 'Standard Application.';
-      report.recommendations = ['Keep app updated', 'Review permissions'];
+      report.dataPrivacy = 'Financial App: Handles sensitive banking credentials.';
+      report.recommendations = [
+        'Enable Biometric Login (Fingerprint/FaceID).',
+        'Never share OTPs with anyone.',
+        'Check your transaction history regularly.'
+      ];
+    } 
+    else if (packageName.includes('social') || packageName.includes('chat') || packageName.includes('gram') || packageName.includes('book')) {
+      report.riskLevel = 'Medium';
+      report.dataPrivacy = 'Social App: Likely collects contacts, location, and usage data.';
+      report.recommendations = [
+        'Review "Privacy Settings" inside the app.',
+        'Limit "Location" access to "While Using".',
+        'Be careful with public photo sharing.'
+      ];
     }
+    else if (packageName.includes('game') || packageName.includes('puzzle') || packageName.includes('io')) {
+      report.riskLevel = 'Low';
+      report.dataPrivacy = 'Gaming App: May display ads and track device ID.';
+      report.recommendations = [
+        'Disconnect from Facebook/Google if not needed.',
+        'Watch out for accidental In-App Purchases.'
+      ];
+    }
+    else {
+      // Generic Fallback
+      report.riskLevel = 'Low';
+      report.dataPrivacy = 'General Application.';
+      report.recommendations = [
+        'Keep the app updated.',
+        'Uninstall if you do not use it for 3 months.'
+      ];
+    }
+
+    // 2. Specific Overrides for Famous Apps
+    if (packageName.includes('facebook')) {
+      report.appName = 'Facebook';
+      report.riskLevel = 'Medium';
+      report.dataPrivacy = 'Aggressive tracking across the internet.';
+    }
+    if (packageName.includes('tiktok')) {
+      report.appName = 'TikTok';
+      report.riskLevel = 'High';
+      report.dataPrivacy = 'High data collection and clipboard usage.';
+    }
+
     return report;
   }
 }
