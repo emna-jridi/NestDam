@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { ReportDto } from './dto/report.dto';
 
@@ -6,70 +7,44 @@ import { ReportDto } from './dto/report.dto';
 export class ReportService {
   private readonly logger = new Logger(ReportService.name);
   private genAI: GoogleGenerativeAI;
+  private readonly modelName: string;
 
-  // 🧠 SMART MODEL LIST: We try these one by one until one works!
-  private readonly MODELS_TO_TRY = [
-    'gemini-1.5-flash',
-    'gemini-1.5-flash-001',
-    'gemini-1.5-pro',
-    'gemini-1.0-pro',
-    'gemini-pro'
-  ];
+  constructor(private configService: ConfigService) {
+    const apiKey = this.configService.get<string>('GEMINI_API_KEY');
+    const model = this.configService.get<string>('GEMINI_MODEL_NAME');
 
-  constructor() {
-    // 👇 YOUR API KEY
-    const API_KEY = 'AIzaSyBkpXuI49UaRRyxp_1JU3vh3rn5AkmfOGA'; 
-
-    if (API_KEY && API_KEY.startsWith('AIza')) {
-      this.genAI = new GoogleGenerativeAI(API_KEY);
-      this.logger.log('✨ Gemini AI Client Ready');
+    if (apiKey && apiKey.startsWith('AIza')) {
+      this.genAI = new GoogleGenerativeAI(apiKey);
+      this.modelName = model || 'gemini-2.5-flash';
+      this.logger.log(`✨ Gemini AI Client Ready with model: ${this.modelName}`);
     } else {
       this.logger.warn('⚠️ No valid API Key found. Defaulting to Local Engine.');
+      this.modelName = '';
     }
   }
 
   async generateSafetyReport(packageName: string): Promise<ReportDto> {
-    // 1. Try AI Analysis (looping through models)
-    if (this.genAI) {
-      for (const modelName of this.MODELS_TO_TRY) {
-        try {
-          // this.logger.log(`🔄 Attempting AI scan with model: ${modelName}`);
-          return await this.analyzeWithAI(packageName, modelName);
-        } catch (error) {
-          // If 404 or error, just log warning and continue loop to next model
-          this.logger.warn(`❌ Model ${modelName} failed. Trying next...`);
-        }
+    // Try AI Analysis if configured
+    if (this.genAI && this.modelName) {
+      try {
+        return await this.analyzeWithAI(packageName);
+      } catch (error) {
+        this.logger.error(`❌ AI analysis failed: ${error.message}. Switching to Local Engine.`);
       }
-      this.logger.error('⚠️ All AI models failed. Switching to Local Engine.');
     }
     
-    // 2. Fallback to Local Engine (Static Logic)
+    // Fallback to Local Engine (Static Logic)
     return this.analyzeLocally(packageName);
   }
 
   // ==========================================
   // 🧠 OPTION A: THE AI ENGINE
   // ==========================================
-  private async analyzeWithAI(packageName: string, modelName: string): Promise<ReportDto> {
-    const model = this.genAI.getGenerativeModel({ model: modelName });
+  private async analyzeWithAI(packageName: string): Promise<ReportDto> {
+    const model = this.genAI.getGenerativeModel({ model: this.modelName });
 
-    const prompt = `
-      You are a mobile security expert. Analyze the Android app package: "${packageName}".
-      
-      Respond with a valid JSON object (NO markdown, NO code blocks) following this exact schema:
-      {
-        "appName": "Common Name of App",
-        "riskLevel": "High" | "Medium" | "Low",
-        "dataPrivacy": "A one-sentence summary of data collection risks.",
-        "recommendations": [
-          "Specific security tip 1",
-          "Specific security tip 2",
-          "Specific security tip 3"
-        ]
-      }
-      
-      If the package is unknown, infer functionality from the name parts.
-    `;
+    const prompt = `Analyze Android app "${packageName}" as security expert. Respond ONLY with valid JSON (no markdown):
+{"appName":"App Name","riskLevel":"High|Medium|Low","dataPrivacy":"One sentence risk summary","recommendations":["Tip 1","Tip 2","Tip 3"]}`;
 
     const result = await model.generateContent(prompt);
     const response = await result.response;
@@ -79,7 +54,7 @@ export class ReportService {
     text = text.replace(/```json/g, '').replace(/```/g, '').trim();
     
     const data = JSON.parse(text);
-    this.logger.log(`✅ Success! Analyzed ${packageName} using ${modelName}`);
+    this.logger.log(`✅ Success! Analyzed ${packageName} using ${this.modelName}`);
 
     return {
       packageName,

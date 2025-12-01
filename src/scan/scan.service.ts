@@ -971,49 +971,45 @@ private async analyzeSingleIosApp(app: IosAppDto) {
     this.logger.debug(
       `[iOS] ${appName} matched ${matchedEtipTrackers.length} ETIP trackers`,
     );
-  } catch (error) {
+  } catch (error: any) {
     this.logger.warn(
       `[iOS] ETIP unavailable, skipping tracker matching: ${error.message}`,
     );
     // Continue without ETIP - will use heuristics only
   }
 
-  const dangerousPermissions: string[] = []; // inconnu sur iOS via screenshot
-  const isDebuggable = false; // pas pertinent pour iOS App Store
-
-  // 2) Enhanced heuristics (works even without ETIP)
+  // 2) Detect heuristics (works even without ETIP)
   const heuristicFindings = this.detectIosHeuristicsMinimal(
     app,
     matchedEtipTrackers,
   );
 
+  // 3) Compute iOS-specific risk score
   const {
     score,
-    permissionPenalty,
-    trackerPenalty,
-    debugPenalty,
-    heuristicPenalty,
     riskLevel,
-  } = this.computeScore({
-    dangerousPermissions,
+    trackerPenalty,
+    heuristicPenalty,
+  } = this.computeScoreForIos({
     etipTrackers: matchedEtipTrackers,
-    isDebuggable,
     heuristicFindings,
   });
 
+  // 4) Build alerts for the app
   const alerts = this.buildAlerts({
     appName,
-    dangerousPermissions,
+    dangerousPermissions: [], // unknown for iOS screenshots
     matchedEtipTrackers,
-    isDebuggable,
+    isDebuggable: false, // not relevant for App Store apps
     heuristicFindings,
     riskLevel,
   });
 
+  // 5) Return structured analysis
   return {
     platform: 'iOS',
     bundleId,
-    category: app.category ?? null,
+    category: category ?? null,
     packageName: bundleId ?? appName,
     name: appName,
     version: '',
@@ -1022,7 +1018,7 @@ private async analyzeSingleIosApp(app: IosAppDto) {
     alerts,
     breakdown: {
       permissions: {
-        penalty: permissionPenalty,
+        penalty: 0,
         count: 0,
         list: [],
       },
@@ -1037,8 +1033,8 @@ private async analyzeSingleIosApp(app: IosAppDto) {
         list: heuristicFindings,
       },
       debug: {
-        penalty: debugPenalty,
-        isDebuggable,
+        penalty: 0,
+        isDebuggable: false,
       },
     },
     trackers: matchedEtipTrackers.map((t) => t.name),
@@ -1222,6 +1218,56 @@ private detectIosHeuristicsMinimal(app: IosAppDto, matchedTrackers: EtipTracker[
   }
 
   return findings;
+}
+private computeScoreForIos(params: {
+  etipTrackers: EtipTracker[];
+  heuristicFindings: string[];
+}) {
+  const { etipTrackers, heuristicFindings } = params;
+
+  // ----------------------------
+  // 1️⃣ Baseline risk
+  // ----------------------------
+  // Since we have limited data (screenshots), assume some baseline risk
+  let rawScore = 30; // start from 30, not zero, to reflect unknown risk
+
+  // ----------------------------
+  // 2️⃣ Tracker impact
+  // ----------------------------
+  // Each tracker adds risk points
+  const trackerPenalty = etipTrackers.length * 15; // heavier weight for trackers
+  rawScore += trackerPenalty;
+
+  // ----------------------------
+  // 3️⃣ Heuristic impact
+  // ----------------------------
+  // Each heuristic finding adds risk points
+  const heuristicPenalty = heuristicFindings.length * 20; // heavy impact for iOS heuristics
+  rawScore += heuristicPenalty;
+
+  // ----------------------------
+  // 4️⃣ Cap at 100
+  // ----------------------------
+  rawScore = Math.min(100, rawScore);
+
+  // ----------------------------
+  // 5️⃣ Determine risk level
+  // ----------------------------
+  const riskLevel =
+    rawScore >= 75
+      ? 'CRITICAL'
+      : rawScore >= 50
+      ? 'HIGH'
+      : rawScore >= 25
+      ? 'MEDIUM'
+      : 'LOW';
+
+  return {
+    score: rawScore,
+    riskLevel,
+    trackerPenalty,
+    heuristicPenalty,
+  };
 }
 
 }
