@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json.schemastore.org/nest-cli",
+  "collection": "@nestjs/schematics",
+  "sourceRoot": "src",
+  "compilerOptions": {
+    "deleteOutDir": true,
+    "assets": [
+      {
+        "include": "scan/workers/*.py",
+        "outDir": "dist/src/scan/workers",
+        "watchAssets": true
+      }
+    ]
+  }
+}
