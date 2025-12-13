@@ -47,7 +47,7 @@
     "firebase-admin": "^13.6.0",
     "form-data": "^4.0.4",
     "google-auth-library": "^10.5.0",
-    "google-play-scraper": "^10.1.1",
+    "google-play-scraper": "^10.1.2",
     "helmet": "^8.1.0",
     "ioredis": "^5.8.2",
     "mongoose": "^8.19.3",
@@ -112,8 +112,7 @@
       "**/*.(t|j)s"
     ],
     "coverageDirectory": "../coverage",
-    "testEnvironment": "node"
-    ,
+    "testEnvironment": "node",
     "moduleNameMapper": {
       "^src/(.*)$": "<rootDir>/../src/$1"
     }
