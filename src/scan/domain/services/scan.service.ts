@@ -347,7 +347,12 @@ export class ScanService {
               trackers: trackersList.map(t => ({ name: t })),
               aiStatus: aiAnalysis.aiStatus,
             },
-            finalScore: finalScore,
+            finalScore: {
+              score: finalScore,
+              storeWeight: 0,
+              ollamaWeight: 100,
+              breakdown: 'APK static analysis',
+            },
             lastScanned: new Date().toISOString(),
             fileName: originalName,
             mobsfHash: upload.md5,
@@ -377,7 +382,12 @@ export class ScanService {
       platform: 'android',
       permissions,
       scanResults: scanRecord.results?.apps?.[0]?.scanResults,
-      finalScore,
+      finalScore: {
+        score: finalScore,
+        storeWeight: 0,
+        ollamaWeight: 100,
+        breakdown: 'APK static analysis',
+      },
       lastScanned: new Date(),
     });
 
