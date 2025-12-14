@@ -21,11 +21,16 @@ import {
   VaultUnlockResponseDto,
   VaultStatsDto,
 } from '../dto/vault.dto';
+import { VaultAiService } from '../services/vault-ai.service';
+import { PasswordMetricsDto } from '../dto/password-metrics.dto';
 
 @Controller('vault')
 @UseGuards(JwtAuthGuard)
 export class VaultController {
-  constructor(private readonly vaultService: VaultService) {}
+  constructor(
+    private readonly vaultService: VaultService,
+    private readonly vaultAiService: VaultAiService,
+  ) { }
 
   /**
    * POST /vault - Create a new vault
@@ -35,7 +40,7 @@ export class VaultController {
   async createVault(@Request() req, @Body() dto: CreateVaultDto) {
     const userId = req.user.userId || req.user.sub;
     const vault = await this.vaultService.createVault(userId, dto.masterPassword);
-    
+
     return {
       message: 'Vault created successfully',
       vaultId: vault.id,
@@ -113,5 +118,13 @@ export class VaultController {
       lastUnlockedAt: vault.lastUnlockedAt,
       autoLockTimeout: vault.autoLockTimeout,
     };
+  }
+
+  /**
+   * POST /vault/ai-analyze - Analyze password strength via AI (Zero Knowledge)
+   */
+  @Post('ai-analyze')
+  async analyzePassword(@Body() metrics: PasswordMetricsDto) {
+    return this.vaultAiService.analyze(metrics);
   }
 }

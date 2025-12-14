@@ -9,6 +9,8 @@ import { VaultService } from './services/vault.service';
 import { PasswordEntryService } from './services/password-entry.service';
 import { CryptoService } from './services/crypto.service';
 import { PasswordStrengthService } from './services/password-strength.service';
+import { VaultAiService } from './services/vault-ai.service';
+import { HttpModule } from '@nestjs/axios';
 
 @Module({
   imports: [
@@ -17,6 +19,7 @@ import { PasswordStrengthService } from './services/password-strength.service';
       { name: PasswordEntry.name, schema: PasswordEntrySchema },
       { name: VaultBackup.name, schema: VaultBackupSchema },
     ]),
+    HttpModule,
   ],
   controllers: [VaultController, PasswordEntryController],
   providers: [
@@ -24,7 +27,8 @@ import { PasswordStrengthService } from './services/password-strength.service';
     PasswordEntryService,
     CryptoService,
     PasswordStrengthService,
+    VaultAiService,
   ],
-  exports: [VaultService, PasswordEntryService, CryptoService],
+  exports: [VaultService, PasswordEntryService, CryptoService, VaultAiService],
 })
-export class VaultModule {}
+export class VaultModule { }
