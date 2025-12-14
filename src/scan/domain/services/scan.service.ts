@@ -12,6 +12,9 @@ import { ScanResponseDto, ScanStatusResponseDto, ScanResultsSummaryDto } from '.
 import { SearchAppRequestDto, SearchAppResponseDto, SearchResultDto, ScanHistoryResponseDto, ScanHistoryItemDto } from '../dtos/search-app.dto';
 import { AppDto, AppDetailsResponseDto } from '../dtos/app.dto';
 import { ScanEntity } from '../entities/scan.entity';
+import { MobSFService } from '../../infrastructure/external-services/mobsf.service';
+import * as fs from 'fs';
+import * as path from 'path';
 
 @Injectable()
 export class ScanService {
@@ -24,6 +27,7 @@ export class ScanService {
     private playStoreService: PlayStoreService,
     private cacheService: CacheService,
     private scoreCalculator: ScoreCalculatorService,
+    private mobsfService: MobSFService,
     @InjectModel('Scan') private scanModel: Model<any>,
   ) {}
 
@@ -82,12 +86,19 @@ export class ScanService {
         await this.scanRepository.update(finalScanId, { scannedApps: scannedCount });
       } catch (error: any) {
         this.logger.warn(`[${finalScanId}] ⚠️ ${appInfo.packageName} failed: ${error.message}`);
-        // still count to keep contract aligned
+        // still count to keep contract aligned; ensure all required fields are present
         analyzedApps.push({
           packageName: appInfo.packageName,
           appName: appInfo.displayName || appInfo.packageName,
-          finalScore: { score: 50 },
-          scanResults: { aiSummary: `Fallback because: ${error.message}` },
+          finalScore: { score: 50, storeWeight: 30, ollamaWeight: 70, breakdown: 'Fallback score' },
+          scanResults: {
+            aiRiskScore: 50,
+            aiRiskLevel: 'medium',
+            aiSummary: `Fallback: ${error.message}`,
+            aiRecommendations: ['Retry scan later'],
+            permissions: [],
+            trackers: [],
+          },
         } as any);
         scannedCount++;
         await this.scanRepository.update(finalScanId, { scannedApps: scannedCount });
@@ -220,6 +231,178 @@ export class ScanService {
   }
 
   /**
+   * Run a static APK scan using MobSF + Ollama
+   */
+  async scanApk(params: { userId: string; deviceId?: string; filePath: string; originalName: string }): Promise<AppDto> {
+    const { userId, deviceId, filePath, originalName } = params;
+
+    if (!fs.existsSync(filePath)) {
+      throw new Error('APK file missing on server');
+    }
+
+    const ext = path.extname(originalName || filePath).toLowerCase();
+    if (ext !== '.apk') {
+      throw new Error('Seuls les fichiers APK sont acceptés');
+    }
+
+    const stats = fs.statSync(filePath);
+    const maxSize = 200 * 1024 * 1024; // 200MB safety
+    if (stats.size > maxSize) {
+      throw new Error('Taille APK trop grande (>200MB)');
+    }
+
+    const scanStart = Date.now();
+
+    // 1) Upload to MobSF
+    const upload = await this.mobsfService.uploadApp(filePath);
+
+    // 2) Trigger static analysis
+    await this.mobsfService.triggerScan(upload.md5, upload.scan_type);
+
+    // 3) Fetch report JSON
+    const report = await this.mobsfService.getScanReport(upload.md5, upload.scan_type);
+
+    // Extract useful fields
+    const packageName = (report.android_api?.package_name || report.android_api?.packageName || 'unknown.package') as string;
+    const appName = (report.android_api?.app_name || report.android_api?.appName || originalName.replace(/\.apk$/i, '')) as string;
+    const versionName = report.android_api?.version_name || report.android_api?.versionName;
+
+    const permissionsObj = report.permissions || {};
+    const permissions = Array.isArray(permissionsObj)
+      ? permissionsObj
+      : Object.keys(permissionsObj).filter(k => permissionsObj[k]);
+    const dangerousPermissions = permissions.filter(p => {
+      const meta = permissionsObj[p];
+      return meta?.protection_level === 'dangerous' || meta?.level === 'dangerous';
+    });
+
+    const trackersList = Array.isArray(report.trackers)
+      ? report.trackers.map((t: any) => t.name || t.title || t.id || 'tracker')
+      : Object.keys(report.trackers || {});
+
+    const exportedComponents = Array.isArray(report.exported_activities)
+      ? report.exported_activities
+      : Object.keys(report.android_api?.exported_components || {});
+
+    const securityFindings = report.security_analysis || {};
+
+    // 4) Build AI prompt payload
+    const aiPayload = {
+      packageName,
+      appName,
+      versionName,
+      permissions,
+      dangerousPermissions,
+      trackers: trackersList,
+      exportedComponents,
+      findings: securityFindings,
+    };
+
+    const aiAnalysis = await this.ollamaService.analyzeAppSecurity(JSON.stringify(aiPayload));
+
+    // 5) Fallback score if AI failed
+    let finalScore = aiAnalysis.aiRiskScore;
+    if (aiAnalysis.usedFallback) {
+      const high = (securityFindings.high || securityFindings.critical || []).length || 0;
+      const medium = (securityFindings.medium || []).length || 0;
+      const low = (securityFindings.low || []).length || 0;
+      const heuristic = Math.min(100, high * 20 + medium * 10 + low * 5 + trackersList.length * 5 + dangerousPermissions.length * 5);
+      finalScore = heuristic || 50;
+    }
+
+    const { aiRiskLevel } = this.scoreCalculator.calculateRiskScore(
+      permissionsObj,
+      report.trackers || {},
+      aiAnalysis.summary,
+      finalScore,
+    );
+
+    // Persist scan in DB
+    const scanDuration = Date.now() - scanStart;
+    const scanRecord: ScanEntity = {
+      id: new Types.ObjectId().toString(),
+      userId,
+      deviceId: deviceId || 'unknown-device',
+      platform: 'android',
+      status: 'completed',
+      apps: [],
+      totalApps: 1,
+      scannedApps: 1,
+      createdAt: new Date(),
+      completedAt: new Date(),
+      duration: scanDuration,
+      results: {
+        apps: [
+          {
+            packageName,
+            appName,
+            version: versionName,
+            platform: 'android',
+            scanResults: {
+              aiRiskScore: finalScore,
+              aiRiskLevel,
+              aiSummary: aiAnalysis.summary,
+              aiRecommendations: aiAnalysis.recommendations?.length ? aiAnalysis.recommendations : ['Réexaminez les permissions sensibles', 'Limiter les autorisations dangereuses', 'Mettre à jour l’application si possible'],
+              permissions: permissions.map(p => ({ name: p })),
+              trackers: trackersList.map(t => ({ name: t })),
+              aiStatus: aiAnalysis.aiStatus,
+            },
+            finalScore: finalScore,
+            lastScanned: new Date().toISOString(),
+            fileName: originalName,
+            mobsfHash: upload.md5,
+            scanType: 'APK',
+          },
+        ],
+        globalSummary: 'APK static analysis via MobSF',
+        globalRecommendations: aiAnalysis.recommendations || [],
+        statistics: {
+          totalApps: 1,
+          critical: aiRiskLevel === 'critical' ? 1 : 0,
+          high: aiRiskLevel === 'high' ? 1 : 0,
+          medium: aiRiskLevel === 'medium' ? 1 : 0,
+          low: aiRiskLevel === 'low' ? 1 : 0,
+          deviceRiskScore: finalScore,
+        },
+      },
+    } as any;
+
+    await this.scanRepository.save(scanRecord);
+
+    // Upsert app entity
+    await this.appRepository.update(packageName, {
+      packageName,
+      appName,
+      version: versionName,
+      platform: 'android',
+      permissions,
+      scanResults: scanRecord.results?.apps?.[0]?.scanResults,
+      finalScore,
+      lastScanned: new Date(),
+    });
+
+    // Build response DTO
+    return {
+      id: scanRecord.id,
+      packageName,
+      appName,
+      version: versionName,
+      platform: 'android',
+      scanResults: {
+        aiRiskScore: finalScore,
+        aiRiskLevel,
+        aiSummary: aiAnalysis.summary,
+        aiRecommendations: aiAnalysis.recommendations?.length ? aiAnalysis.recommendations : ['Réexaminez les permissions sensibles', 'Limiter les autorisations dangereuses', 'Mettre à jour l’application si possible'],
+        permissions: permissions.map(p => ({ name: p })),
+        trackers: trackersList.map(t => ({ name: t })),
+        aiStatus: aiAnalysis.aiStatus,
+      },
+      finalScore,
+      lastScanned: new Date().toISOString(),
+    } as AppDto;
+  }
+
+  /**
    * Search for apps in Play Store with predictive risk score
    */
   async searchApp(request: SearchAppRequestDto): Promise<SearchAppResponseDto> {
@@ -319,12 +502,7 @@ export class ScanService {
               explanation: this.getPermissionExplanation(p),
             })),
           },
-          finalScore: {
-            score: riskData.aiRiskScore,
-            storeWeight: 30,
-            ollamaWeight: 70,
-            breakdown: `Ollama (70%): ${Math.round(riskData.aiRiskScore * 0.7)} + Store (30%): ${Math.round((storeData.rating || 0) * 20 * 0.3)} = ${riskData.aiRiskScore}`,
-          },
+          finalScore: riskData.aiRiskScore,
         },
         history: [],
       };
@@ -343,12 +521,7 @@ export class ScanService {
         platform: app.platform || 'android',
         storeData: app.storeData as any,
         scanResults: app.scanResults as any,
-        finalScore: typeof app.finalScore === 'object' ? app.finalScore as any : {
-          score: finalScore,
-          storeWeight: 30,
-          ollamaWeight: 70,
-          breakdown: `Score: ${finalScore}`,
-        },
+        finalScore: finalScore,
         lastScanned: app.lastScanned?.toISOString(),
       },
       history: [],
@@ -402,12 +575,14 @@ export class ScanService {
     const aiAnalysis = await this.ollamaService.analyzeAppSecurity(appInfo);
     this.logger.debug(`[analyzeApp] ✅ Ollama analysis done in ${Date.now() - ollamaStart}ms`);
 
-    // Calculate risk score
+    // Calculate risk score using unified calculator (permissions + trackers + AI score)
     this.logger.debug(`[analyzeApp] 📊 Calculating risk score for ${packageName}...`);
+    const trackers: string[] = [];
     const riskData = this.scoreCalculator.calculateRiskScore(
       permissions,
-      {},
-      aiAnalysis.summary
+      trackers,
+      aiAnalysis.summary,
+      aiAnalysis.aiRiskScore,
     );
 
     // Calculate final score (70% Ollama + 30% Store)
@@ -434,13 +609,14 @@ export class ScanService {
         aiRiskScore: riskData.aiRiskScore,
         aiRiskLevel: riskData.aiRiskLevel,
         aiSummary: aiAnalysis.summary,
-        aiRecommendations: aiAnalysis.recommendations,
+        aiRecommendations: aiAnalysis.recommendations || [],
         permissions: permissions.map(p => ({
           name: p,
           translation: this.translatePermission(p),
           riskLevel: this.getPermissionRiskLevel(p),
           explanation: this.getPermissionExplanation(p),
         })),
+        trackers: [],
       },
       finalScore: {
         score: finalScore,

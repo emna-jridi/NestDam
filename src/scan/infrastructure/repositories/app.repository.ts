@@ -63,6 +63,9 @@ export class AppRepository implements IAppRepository {
       scanResults: doc.scanResults,
       finalScore: doc.finalScore,
       lastScanned: doc.lastScanned,
+      fileName: doc.fileName,
+      mobsfHash: doc.mobsfHash,
+      scanType: doc.scanType,
       createdAt: doc.createdAt,
       updatedAt: doc.updatedAt,
     };

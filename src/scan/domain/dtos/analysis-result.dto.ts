@@ -7,6 +7,7 @@ export interface AnalysisResultDto {
   aiRecommendations: string[];
   permissions?: PermissionDto[];
   trackers?: TrackerDto[];
+  aiStatus?: 'ok' | 'fallback';
 }
 
 export interface AnalysisEnvelopeDto {

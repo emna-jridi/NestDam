@@ -47,6 +47,18 @@ export class MobSFService {
     }
   }
 
+  async triggerScan(hash: string, scanType: string = 'apk'): Promise<void> {
+    try {
+      await this.httpClient.post('/api/v1/scan', {
+        hash,
+        scan_type: scanType,
+      });
+    } catch (error) {
+      this.logger.error(`MobSF scan trigger failed: ${(error as any).message}`);
+      throw error;
+    }
+  }
+
   async getScanReport(hash: string, scanType: string = 'apk'): Promise<{
     scan_id: string;
     certificates: any[];

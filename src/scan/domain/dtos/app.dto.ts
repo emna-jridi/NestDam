@@ -144,13 +144,24 @@ export class AppDto {
   scanResults?: ScanResultsDto;
 
   @IsOptional()
-  @ValidateNested()
-  @Type(() => FinalScoreDto)
-  finalScore?: FinalScoreDto;
+  @IsNumber()
+  finalScore?: number;
 
   @IsOptional()
   @IsDateString()
   lastScanned?: string;
+
+  @IsOptional()
+  @IsString()
+  fileName?: string;
+
+  @IsOptional()
+  @IsString()
+  mobsfHash?: string;
+
+  @IsOptional()
+  @IsString()
+  scanType?: string;
 }
 
 // ============= App Details Response DTO =============

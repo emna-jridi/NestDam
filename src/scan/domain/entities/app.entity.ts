@@ -46,6 +46,9 @@ export interface AppEntity {
   scanResults?: ScanResultEntity;
   finalScore?: FinalScoreEntity;
   lastScanned?: Date;
+  fileName?: string;
+  mobsfHash?: string;
+  scanType?: string;
   createdAt?: Date;
   updatedAt?: Date;
 }

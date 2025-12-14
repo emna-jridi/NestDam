@@ -27,6 +27,15 @@ export class AppSchema extends Document {
   @Prop({ type: Object, default: {} })
   finalScore?: Record<string, any>;
 
+  @Prop({ required: false })
+  fileName?: string;
+
+  @Prop({ required: false })
+  mobsfHash?: string;
+
+  @Prop({ required: false })
+  scanType?: string;
+
   @Prop({ type: Date })
   lastScanned?: Date;
 

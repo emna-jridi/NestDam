@@ -84,6 +84,8 @@ export class OllamaService {
   async analyzeAppSecurity(appInfo: string): Promise<{
     summary: string;
     recommendations: string[];
+    aiRiskScore: number;
+    aiRiskLevel: 'low' | 'medium' | 'high' | 'critical';
     usedFallback: boolean;
     aiStatus: 'ok' | 'fallback';
   }> {
@@ -148,6 +150,8 @@ export class OllamaService {
   private async performAnalysis(appInfo: string): Promise<{
     summary: string;
     recommendations: string[];
+    aiRiskScore: number;
+    aiRiskLevel: 'low' | 'medium' | 'high' | 'critical';
   }> {
     const prompt = this.buildSecurityPrompt(appInfo);
     const analysisStart = Date.now();
@@ -187,24 +191,18 @@ export class OllamaService {
    */
   private buildSecurityPrompt(appInfo: string): string {
     return `You are a security analyst specializing in Android app security and privacy.
+Return a STRICT JSON object with the following shape and nothing else:
+{
+  "aiRiskScore": number (0-100),
+  "aiRiskLevel": "low" | "medium" | "high" | "critical",
+  "summary": string,
+  "recommendations": string[] (3-5 short, action-focused items)
+}
+Use the app info below and keep wording concise and neutral. Do not include explanations outside the JSON.
 
-Analyze the following Android app information for security risks and privacy concerns. Provide:
-1. A brief security summary (100-150 words)
-2. 3-5 specific, actionable security recommendations
-
-\`\`\`
-App Information:
+APP_INFO_START
 ${appInfo}
-\`\`\`
-
-Format your response exactly as:
-SUMMARY: [Your security analysis here]
-RECOMMENDATIONS:
-1. [First recommendation]
-2. [Second recommendation]
-3. [Third recommendation]
-
-Focus on real security concerns like excessive permissions, trackers, data leaks, and privacy issues.`;
+APP_INFO_END`;
   }
 
   /**
@@ -213,37 +211,46 @@ Focus on real security concerns like excessive permissions, trackers, data leaks
   private parseResponse(text: string): {
     summary: string;
     recommendations: string[];
+    aiRiskScore: number;
+    aiRiskLevel: 'low' | 'medium' | 'high' | 'critical';
   } {
     try {
-      // Extract summary
-      const summaryMatch = text.match(/SUMMARY:\s*(.+?)(?=RECOMMENDATIONS:|$)/is);
-      const summary = summaryMatch
-        ? summaryMatch[1].trim().substring(0, 500)
-        : 'Security analysis completed.';
+      const parsed = JSON.parse(text.trim());
+      const allowedLevels = new Set(['low', 'medium', 'high', 'critical']);
 
-      // Extract recommendations
-      const recommendationsMatch = text.match(/RECOMMENDATIONS:\s*([\s\S]*?)$/i);
-      const recommendationsText = recommendationsMatch ? recommendationsMatch[1] : '';
+      if (
+        typeof parsed !== 'object' ||
+        typeof parsed.summary !== 'string' ||
+        !Array.isArray(parsed.recommendations) ||
+        typeof parsed.aiRiskScore !== 'number' ||
+        typeof parsed.aiRiskLevel !== 'string'
+      ) {
+        throw new Error('Missing required JSON fields');
+      }
 
-      const recommendations = recommendationsText
-        .split(/^\d+\.\s+/m)
-        .filter(r => r.trim().length > 0)
-        .map(r => r.trim().split('\n')[0])
-        .filter(r => r.length > 0)
+      const aiRiskScore = Math.min(100, Math.max(0, Math.round(parsed.aiRiskScore)));
+      const aiRiskLevel = parsed.aiRiskLevel.toLowerCase();
+      if (!allowedLevels.has(aiRiskLevel)) {
+        throw new Error('Invalid aiRiskLevel value');
+      }
+
+      const recommendations = parsed.recommendations
+        .map((r: any) => (typeof r === 'string' ? r.trim() : ''))
+        .filter((r: string) => r.length > 0)
         .slice(0, 5);
 
       return {
-        summary: summary || 'Security analysis completed.',
-        recommendations:
-          recommendations.length > 0
-            ? recommendations
-            : ['Review app permissions and data access carefully.'],
+        summary: parsed.summary.toString().trim().substring(0, 500) || 'Security analysis completed.',
+        recommendations: recommendations.length > 0
+          ? recommendations
+          : ['Review app permissions and data access carefully.'],
+        aiRiskScore,
+        aiRiskLevel,
       };
     } catch (error) {
-      this.logger.warn(`Error parsing Ollama response: ${(error as any).message}`);
+      this.logger.warn(`Error parsing Ollama response as JSON: ${(error as any).message}`);
       return {
-        summary: 'Security analysis completed.',
-        recommendations: ['Review app permissions and data access carefully.'],
+        ...this.getDefaultResponse(),
       };
     }
   }
@@ -254,6 +261,8 @@ Focus on real security concerns like excessive permissions, trackers, data leaks
   private getDefaultResponse(): {
     summary: string;
     recommendations: string[];
+    aiRiskScore: number;
+    aiRiskLevel: 'low' | 'medium' | 'high' | 'critical';
   } {
     return {
       summary:
@@ -267,6 +276,8 @@ Focus on real security concerns like excessive permissions, trackers, data leaks
         'Monitor network activity for unusual data transmission',
         'Keep app updated to latest version',
       ],
+      aiRiskScore: 50,
+      aiRiskLevel: 'medium',
     };
   }
 

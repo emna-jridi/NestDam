@@ -1,8 +1,13 @@
-import { Controller, Post, Get, Body, Param, Query, HttpCode, HttpStatus, BadRequestException, Logger } from '@nestjs/common';
+import { Controller, Post, Get, Body, Param, Query, HttpCode, HttpStatus, BadRequestException, Logger, UploadedFile, UseInterceptors } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { diskStorage } from 'multer';
+import * as path from 'path';
+import * as fs from 'fs';
 import { StartScanUseCase } from '../../application/use-cases/start-scan.use-case';
 import { GetScanStatusUseCase } from '../../application/use-cases/get-scan-status.use-case';
 import { ScanRepository } from '../../infrastructure/repositories/scan.repository';
 import { AppRepository } from '../../infrastructure/repositories/app.repository';
+import { ScanService } from '../../domain/services/scan.service';
 import { StartScanRequestDto } from '../../domain/dtos/start-scan.dto';
 import { ScanResponseDto, ScanStatusResponseDto } from '../../domain/dtos/scan-response.dto';
 import { sanitizeString } from '../../utils/sanitize.util';
@@ -23,7 +28,67 @@ export class ScanController {
     private getScanStatusUseCase: GetScanStatusUseCase,
     private scanRepository: ScanRepository,
     private appRepository: AppRepository,
+    private scanService: ScanService,
   ) {}
+
+  @Post('apk')
+  @UseInterceptors(FileInterceptor('file', {
+    storage: diskStorage({
+      destination: (req, file, cb) => {
+        const uploadDir = path.join(process.cwd(), 'uploads', 'apk-temp');
+        fs.mkdirSync(uploadDir, { recursive: true });
+        cb(null, uploadDir);
+      },
+      filename: (req, file, cb) => {
+        cb(null, `${Date.now()}-${file.originalname}`);
+      },
+    }),
+    limits: { fileSize: 200 * 1024 * 1024 },
+    fileFilter: (req, file, cb) => {
+      const ext = path.extname(file.originalname || '').toLowerCase();
+      if (ext !== '.apk') return cb(new BadRequestException('Seuls les fichiers APK sont acceptés'), false);
+      cb(null, true);
+    },
+  }))
+  @HttpCode(HttpStatus.OK)
+  async scanApk(
+    @UploadedFile() file: Express.Multer.File,
+    @Body('userId') userId: string,
+    @Body('deviceId') deviceId?: string,
+  ): Promise<ApiResponse<any>> {
+    try {
+      if (!file) {
+        throw new BadRequestException('Fichier APK requis');
+      }
+      if (!userId) {
+        throw new BadRequestException('userId requis');
+      }
+
+      const result = await this.scanService.scanApk({
+        userId,
+        deviceId,
+        filePath: file.path,
+        originalName: file.originalname,
+      });
+
+      // Cleanup temp file
+      fs.unlink(file.path, () => {});
+
+      return {
+        success: true,
+        data: { app: result },
+        timestamp: new Date().toISOString(),
+      };
+    } catch (error: any) {
+      this.logger.error(`APK scan failed: ${error.message}`);
+      if (file?.path) fs.unlink(file.path, () => {});
+      return {
+        success: false,
+        error: sanitizeString(error.message || 'Erreur analyse APK'),
+        timestamp: new Date().toISOString(),
+      };
+    }
+  }
 
   @Post('start')
   @HttpCode(HttpStatus.OK)
@@ -34,7 +99,16 @@ export class ScanController {
         throw new BadRequestException('At least one app package name is required');
       }
 
-      this.logger.log(`Received scan request for ${request.apps.length} apps`);
+      // ✅ VALIDATE userId & deviceId
+      if (!request.userId || request.userId === 'user' || request.userId === 'unknown') {
+        throw new BadRequestException('Valid userId is required. Please authenticate first.');
+      }
+      
+      if (!request.deviceId || request.deviceId === 'device' || request.deviceId === 'unknown') {
+        throw new BadRequestException('Valid deviceId is required.');
+      }
+
+      this.logger.log(`✅ Authenticated scan: userId=${request.userId}, deviceId=${request.deviceId}, apps=${request.apps.length}`);
 
       const result = await this.startScanUseCase.execute(request);
 
@@ -91,13 +165,18 @@ export class ScanController {
         };
       }
 
+      // Extract finalScore as number
+      const finalScore = typeof app.finalScore === 'object' && 'score' in app.finalScore
+        ? (app.finalScore as any).score
+        : (typeof app.finalScore === 'number' ? app.finalScore : 0);
+
       return {
         success: true,
         data: {
           packageName: sanitizeString(app.packageName),
           appName: sanitizeString(app.appName || ''),
           platform: app.platform,
-          finalScore: app.finalScore,
+          finalScore: finalScore,
           lastScanned: app.lastScanned,
           permissionCount: Array.isArray(app.permissions)
             ? app.permissions.length

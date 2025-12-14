@@ -4,6 +4,13 @@ import { AppDto } from '../dtos/app.dto';
 
 @Injectable()
 export class ScoreCalculatorService {
+  readonly riskBands = {
+    low: { min: 0, max: 39 },
+    medium: { min: 40, max: 69 },
+    high: { min: 70, max: 84 },
+    critical: { min: 85, max: 100 },
+  } as const;
+
   /**
    * Calculate risk score based on permissions, trackers, and AI analysis
    */
@@ -11,29 +18,29 @@ export class ScoreCalculatorService {
     permissions: Record<string, any>,
     trackers: Record<string, any>,
     aiSummary: string,
+    aiRiskScoreInput?: number,
   ): {
     aiRiskScore: number;
     aiRiskLevel: 'low' | 'medium' | 'high' | 'critical';
   } {
-    let score = 0;
-
-    // Permission-based scoring
+    // Permission-based scoring (0-100)
     const permissionScore = this.scorePermissions(permissions || {});
-    score += permissionScore * 0.3;
 
-    // Tracker-based scoring
+    // Tracker-based scoring (0-100)
     const trackerScore = this.scoreTrackers(trackers || {});
-    score += trackerScore * 0.2;
 
-    // AI analysis scoring
-    const aiScore = this.scoreAISummary(aiSummary);
-    score += aiScore * 0.5;
+    // AI score: prefer structured aiRiskScore when provided, otherwise keyword heuristic
+    const aiScore = typeof aiRiskScoreInput === 'number' && !Number.isNaN(aiRiskScoreInput)
+      ? Math.min(100, Math.max(0, Math.round(aiRiskScoreInput)))
+      : this.scoreAISummary(aiSummary);
 
-    const finalScore = Math.min(100, Math.max(0, score));
+    // Weighted aggregate aligned to permissions + trackers + AI
+    const weightedScore = (permissionScore * 0.35) + (trackerScore * 0.25) + (aiScore * 0.4);
+    const finalScore = Math.min(100, Math.max(0, Math.round(weightedScore)));
     const level = this.scoreToLevel(finalScore);
 
     return {
-      aiRiskScore: Math.round(finalScore),
+      aiRiskScore: finalScore,
       aiRiskLevel: level,
     };
   }
@@ -118,10 +125,14 @@ export class ScoreCalculatorService {
    * Convert numerical score to risk level
    */
   private scoreToLevel(score: number): 'low' | 'medium' | 'high' | 'critical' {
-    if (score >= 80) return 'critical';
-    if (score >= 60) return 'high';
-    if (score >= 40) return 'medium';
+    if (score >= this.riskBands.critical.min) return 'critical';
+    if (score >= this.riskBands.high.min) return 'high';
+    if (score >= this.riskBands.medium.min) return 'medium';
     return 'low';
+  }
+
+  getRiskLevel(score: number): 'low' | 'medium' | 'high' | 'critical' {
+    return this.scoreToLevel(score);
   }
 
   /**

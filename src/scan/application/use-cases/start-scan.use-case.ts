@@ -239,10 +239,12 @@ export class StartScanUseCase {
       this.logger.debug(`[${scanId}] 🤖 Calling Ollama for ${packageName}...`);
       const aiAnalysis = await this.ollamaService.analyzeAppSecurity(appInfo);
 
+      const trackerList = Object.keys(mobsfReport.trackers || {});
       const { aiRiskScore, aiRiskLevel } = this.scoreCalculator.calculateRiskScore(
         permissions,
-        mobsfReport.trackers || {},
+        trackerList,
         aiAnalysis.summary,
+        aiAnalysis.aiRiskScore,
       );
 
       // FALLBACK SCORE IF AI FAILED
@@ -263,12 +265,12 @@ export class StartScanUseCase {
 
       const result: AnalysisResultDto = {
         aiRiskScore: finalScore,
-        aiRiskLevel: aiRiskLevel,
-        aiStatus: aiAnalysis.aiStatus,
+        aiRiskLevel,
         aiSummary: aiAnalysis.summary,
         aiRecommendations: aiAnalysis.recommendations || [],
         permissions: permissions.map(p => ({ name: p })),
-        trackers: Object.keys(mobsfReport.trackers || {}).map(t => ({ name: t })),
+        trackers: trackerList.map(t => ({ name: t })),
+        aiStatus: aiAnalysis.aiStatus,
       } as any;
 
       await this.cacheService.set(cacheKey, result, 3600);
