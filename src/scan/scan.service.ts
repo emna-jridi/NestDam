@@ -11,9 +11,12 @@ import { Model } from 'mongoose';
 import { Scan } from './schemas/scan.schema';
 import { Tracker } from '../app-registry/schemas/tracker.schema';
 import { InstalledAppDto } from './dto/installed-apps.dto';
-import { IosAppDto } from './dto/ios-screenshot.dto';
 import { GetScansQueryDto } from './dto/get-scans.dto';
-import { AppDetailsDto, PermissionsInfoDto, TrackersInfoDto } from './dto/app-details.dto';
+import {
+  AppDetailsDto,
+  PermissionsInfoDto,
+  TrackersInfoDto,
+} from './dto/app-details.dto';
 import { ScanAnalyzerService } from './services/scan-analyzer.service';
 import { ScanComparisonService } from './services/scan-comparison.service';
 import { ScanStatisticsService } from './services/scan-statistics.service';
@@ -43,12 +46,15 @@ export class ScanService {
     private playStoreService: PlayStoreService,
     private permissionAnalyzer: PermissionAnalyzerService,
     private readonly etipService: EtipService,
-  ) { }
+  ) {}
   //android
   async analyzeInstalledApps(userHash: string, apps: InstalledAppDto[]) {
     try {
       const etipTrackers = await this.etipService.getAllTrackers();
-      const results = await this.scanAnalyzer.analyzeAndroidApps(apps, etipTrackers);
+      const results = await this.scanAnalyzer.analyzeAndroidApps(
+        apps,
+        etipTrackers,
+      );
       const summary = this.scanSummary.generate(results);
 
       const scan = await this.scanModel.create({
@@ -72,11 +78,14 @@ export class ScanService {
       throw new Error(`Failed to analyze installed apps: ${error.message}`);
     }
   }
-  //ios 
-  async analyzeIosApps(userHash: string, apps: InstalledAppDto []) {
+  //ios
+  async analyzeIosApps(userHash: string, apps: InstalledAppDto[]) {
     try {
       const etipTrackers = await this.etipService.getAllTrackers();
-      const results = await this.scanAnalyzer.analyzeIosApps(apps, etipTrackers);
+      const results = await this.scanAnalyzer.analyzeIosApps(
+        apps,
+        etipTrackers,
+      );
       const summary = this.scanSummary.generate(results);
 
       const scan = await this.scanModel.create({
@@ -199,6 +208,180 @@ export class ScanService {
     return this.scanStatistics.getStatistics(userHash);
   }
 
+  // SCAN HISTORY WITH TRENDS
+  async getScanHistory(
+    userHash: string,
+    query: {
+      days?: number;
+      startDate?: string;
+      endDate?: string;
+      limit?: number;
+      offset?: number;
+    },
+  ) {
+    try {
+      const limit = Math.min(query.limit || 50, 100);
+      const offset = query.offset || 0;
+
+      // Build date filter
+      const dateFilter: any = {};
+      if (query.startDate) {
+        dateFilter.$gte = new Date(query.startDate);
+      }
+      if (query.endDate) {
+        dateFilter.$lte = new Date(query.endDate);
+      }
+      if (query.days && !query.startDate) {
+        const daysAgo = new Date();
+        daysAgo.setDate(daysAgo.getDate() - query.days);
+        dateFilter.$gte = daysAgo;
+      }
+
+      const filter: any = { userHash };
+      if (Object.keys(dateFilter).length > 0) {
+        filter.createdAt = dateFilter;
+      }
+
+      // Get scans with pagination
+      const [scans, total] = await Promise.all([
+        this.scanModel
+          .find(filter)
+          .sort({ createdAt: -1 })
+          .skip(offset)
+          .limit(limit)
+          .lean()
+          .exec(),
+        this.scanModel.countDocuments(filter),
+      ]);
+
+      // Transform scans to response format
+      const scanEntries = scans.map((scan) => {
+        const riskDist = scan.summary?.riskDistribution || {
+          critical: 0,
+          high: 0,
+          medium: 0,
+          low: 0,
+        };
+
+        // Calculate safe apps (apps not in risk categories)
+        const riskyApps =
+          (riskDist.critical || 0) +
+          (riskDist.high || 0) +
+          (riskDist.medium || 0);
+        const safeApps = Math.max(0, (scan.totalApps || 0) - riskyApps);
+
+        return {
+          id: String(scan._id),
+          timestamp: (scan.createdAt as Date).toISOString(),
+          privacyScore: scan.summary?.avgScore || scan.score || 0,
+          totalApps: scan.totalApps || 0,
+          riskyApps,
+          safeApps,
+          mediumRiskApps: riskDist.medium || 0,
+          highRiskApps: (riskDist.high || 0) + (riskDist.critical || 0),
+          riskDistribution: {
+            high: (riskDist.high || 0) + (riskDist.critical || 0),
+            medium: riskDist.medium || 0,
+            low: riskDist.low || 0,
+            safe: safeApps,
+          },
+        };
+      });
+
+      // Calculate summary
+      const allScans = await this.scanModel
+        .find({ userHash })
+        .sort({ createdAt: 1 })
+        .lean()
+        .exec();
+
+      const totalScans = allScans.length;
+      const averageScore =
+        totalScans > 0
+          ? allScans.reduce(
+              (sum, s) => sum + (s.summary?.avgScore || s.score || 0),
+              0,
+            ) / totalScans
+          : 0;
+
+      // Calculate score trend (compare last 7 scans vs previous 7 scans)
+      let scoreTrend: 'up' | 'down' | 'stable' = 'stable';
+      let scoreChange = 0;
+
+      if (allScans.length >= 14) {
+        const recentScans = allScans.slice(-7);
+        const olderScans = allScans.slice(-14, -7);
+
+        const recentAvg =
+          recentScans.reduce(
+            (sum, s) => sum + (s.summary?.avgScore || s.score || 0),
+            0,
+          ) / recentScans.length;
+
+        const olderAvg =
+          olderScans.reduce(
+            (sum, s) => sum + (s.summary?.avgScore || s.score || 0),
+            0,
+          ) / olderScans.length;
+
+        scoreChange = recentAvg - olderAvg;
+        const percentChange = (scoreChange / olderAvg) * 100;
+
+        if (percentChange > 2) {
+          scoreTrend = 'up';
+        } else if (percentChange < -2) {
+          scoreTrend = 'down';
+        }
+      } else if (allScans.length >= 2) {
+        // If less than 14 scans, compare last 2
+        const recent = allScans[allScans.length - 1];
+        const older = allScans[allScans.length - 2];
+
+        const recentScore = recent.summary?.avgScore || recent.score || 0;
+        const olderScore = older.summary?.avgScore || older.score || 0;
+
+        scoreChange = recentScore - olderScore;
+        const percentChange = (scoreChange / olderScore) * 100;
+
+        if (percentChange > 2) {
+          scoreTrend = 'up';
+        } else if (percentChange < -2) {
+          scoreTrend = 'down';
+        }
+      }
+
+      const firstScanDate =
+        allScans.length > 0
+          ? (allScans[0].createdAt as Date).toISOString()
+          : null;
+      const lastScanDate =
+        allScans.length > 0
+          ? (allScans[allScans.length - 1].createdAt as Date).toISOString()
+          : null;
+
+      return {
+        scans: scanEntries,
+        summary: {
+          totalScans,
+          averageScore: Math.round(averageScore * 10) / 10,
+          scoreTrend,
+          scoreChange: Math.round(scoreChange * 10) / 10,
+          firstScanDate,
+          lastScanDate,
+        },
+        pagination: {
+          total,
+          limit,
+          offset,
+          hasMore: offset + limit < total,
+        },
+      };
+    } catch (error) {
+      this.logger.error('Get scan history failed', error);
+      throw new Error(`Failed to get scan history: ${error.message}`);
+    }
+  }
+
   //  APP SEARCH
   async searchAppsByName(query: string, limit: number = 20) {
     const dbResults = await this.appRegistryService.searchApps(query, limit);
@@ -222,10 +405,7 @@ export class ScanService {
       trackers: { total: 0, list: [] },
     }));
 
-    return [
-      ...dbResults.map((app) => this.formatDBApp(app)),
-      ...formattedPlay,
-    ];
+    return [...dbResults.map((app) => this.formatDBApp(app)), ...formattedPlay];
   }
 
   async searchAppByPackage(packageName: string): Promise<AppDetailsDto> {
@@ -350,9 +530,7 @@ export class ScanService {
     }
 
     if (report.allowBackup) {
-      recommendations.push(
-        'Désactiver allowBackup pour protéger les données',
-      );
+      recommendations.push('Désactiver allowBackup pour protéger les données');
     }
 
     if (
@@ -484,10 +662,10 @@ export class ScanService {
       alternatives: dbApp.alternatives || [],
       stats: dbApp.scanCount
         ? {
-          totalScans: dbApp.scanCount || 0,
-          avgScoreFromCommunity: dbApp.communityScore,
-          lastScanned: dbApp.lastScanned,
-        }
+            totalScans: dbApp.scanCount || 0,
+            avgScoreFromCommunity: dbApp.communityScore,
+            lastScanned: dbApp.lastScanned,
+          }
         : undefined,
     };
   }

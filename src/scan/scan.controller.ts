@@ -25,8 +25,19 @@ import { ComparScansDto } from './dto/compare-scans.dto';
 import { GetScansQueryDto } from './dto/get-scans.dto';
 import * as fs from 'fs';
 import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiBearerAuth,
+} from '@nestjs/swagger';
+import {
+  ScanHistoryQueryDto,
+  ScanHistoryResponseDto,
+} from './dto/scan-history.dto';
 
-@Controller('v1/scan')
+@ApiTags('Scan')
+@Controller('scan')
 export class ScanController {
   constructor(
     private readonly scanService: ScanService,
@@ -168,6 +179,27 @@ export class ScanController {
         data: stats,
       };
     } catch (error) {
+      throw new BadRequestException(error.message);
+    }
+  }
+
+  @Get('history')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get scan history with trends and pagination' })
+  @ApiResponse({
+    status: 200,
+    description: 'Scan history retrieved successfully',
+    type: ScanHistoryResponseDto,
+  })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  async getScanHistory(@Req() req: any, @Query() query: ScanHistoryQueryDto) {
+    try {
+      // Use userId as userHash for authenticated requests
+      const userHash = req.user.userId;
+      const result = await this.scanService.getScanHistory(userHash, query);
+      return result;
+    } catch (error: any) {
       throw new BadRequestException(error.message);
     }
   }
