@@ -29,6 +29,6 @@ import { App, AppSchema } from '../app-registry/schemas/app.schema';
   ],
   controllers: [PrivacyTipsController],
   providers: [PrivacyTipsService, AITipGeneratorService],
-  exports: [PrivacyTipsService],
+  exports: [PrivacyTipsService, AITipGeneratorService],
 })
 export class PrivacyTipsModule {}

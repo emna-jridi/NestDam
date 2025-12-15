@@ -17,6 +17,11 @@ import { DevicesModule } from './devices/devices.module';
 import { LeakcheckModule } from './leakcheck/leakcheck.module';
 import { PrivacyTipsModule } from './privacy-tips/privacy-tips.module';
 import { RedisModule } from './redis/redis.module';
+import { SearchModule } from './search/search.module';
+import { AlertsModule } from './alerts/alerts.module';
+import { ReportModule } from './report/report.module';
+import { ReportsModule } from './reports/reports.module';
+import { InsightsModule } from './insights/insights.module';
 
 @Module({
   imports: [
@@ -43,6 +48,11 @@ import { RedisModule } from './redis/redis.module';
     LeakcheckModule,
     PrivacyTipsModule,
     RedisModule,
+    SearchModule,
+    AlertsModule,
+    ReportModule,
+    ReportsModule,
+    InsightsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
