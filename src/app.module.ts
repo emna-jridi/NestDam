@@ -5,6 +5,9 @@ import { DatabaseModule } from './database/database.module';
 import { UsersModule } from './users/users.module';
 import { ScanModule } from './scan/scan.module';
 import { VaultModule } from './vault/vault.module';
+import { AlertsModule } from './alerts/alerts.module';
+import { ReportModule } from './report/report.module';
+import { DarkWebModule } from './darkweb/darkweb.module';
 
 @Module({
   imports: [
@@ -18,8 +21,11 @@ import { VaultModule } from './vault/vault.module';
     AuthModule,
     ScanModule,
     VaultModule,
+    AlertsModule,
+    ReportModule,
+    DarkWebModule,
   ],
   controllers: [],
   providers: [],
 })
-export class AppModule {}
+export class AppModule { }

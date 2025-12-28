@@ -29,7 +29,7 @@ export class ScanController {
     private scanRepository: ScanRepository,
     private appRepository: AppRepository,
     private scanService: ScanService,
-  ) {}
+  ) { }
 
   @Post('apk')
   @UseInterceptors(FileInterceptor('file', {
@@ -72,7 +72,7 @@ export class ScanController {
       });
 
       // Cleanup temp file
-      fs.unlink(file.path, () => {});
+      fs.unlink(file.path, () => { });
 
       return {
         success: true,
@@ -81,7 +81,7 @@ export class ScanController {
       };
     } catch (error: any) {
       this.logger.error(`APK scan failed: ${error.message}`);
-      if (file?.path) fs.unlink(file.path, () => {});
+      if (file?.path) fs.unlink(file.path, () => { });
       return {
         success: false,
         error: sanitizeString(error.message || 'Erreur analyse APK'),
@@ -103,7 +103,7 @@ export class ScanController {
       if (!request.userId || request.userId === 'user' || request.userId === 'unknown') {
         throw new BadRequestException('Valid userId is required. Please authenticate first.');
       }
-      
+
       if (!request.deviceId || request.deviceId === 'device' || request.deviceId === 'unknown') {
         throw new BadRequestException('Valid deviceId is required.');
       }
@@ -237,25 +237,27 @@ export class ScanController {
       }
 
       const latestScan = userScans[0];
-      this.logger.log(`[SCAN_DB] Found scan ${latestScan.id} with ${latestScan.apps?.length || 0} apps`);
+
+      // Extract apps from results.apps (not latestScan.apps directly)
+      const appsFromResults = latestScan.results?.apps || [];
+      this.logger.log(`[SCAN_DB] Found scan ${latestScan.id} with ${appsFromResults.length} apps from results.apps`);
 
       // Map apps from the latest scan
-      const apps = (latestScan.apps || []).map((app) => {
-        const score = typeof app.finalScore === 'number' 
-          ? app.finalScore 
-          : app.finalScore?.score || 0;
-        
+      const apps = appsFromResults.map((app: any) => {
+        // Extract score from AI analysis
+        const score = app.aiRiskScore || 0;
+
         return {
-          packageName: sanitizeString(app.packageName),
+          packageName: sanitizeString(app.packageName || ''),
           appName: sanitizeString(app.appName || ''),
           finalScore: score,
-          lastScanned: app.lastScanned,
+          riskLevel: app.aiRiskLevel || 'unknown',
+          lastScanned: latestScan.createdAt,
         };
       });
 
-      const globalScore = apps.length > 0
-        ? apps.reduce((sum, app) => sum + app.finalScore, 0) / apps.length
-        : 0;
+      const globalScore = (latestScan.results as any)?.globalScore ||
+        (apps.length > 0 ? apps.reduce((sum, app) => sum + app.finalScore, 0) / apps.length : 0);
 
       this.logger.log(`[SCAN] Returning ${apps.length} apps with global score ${globalScore}`);
 
