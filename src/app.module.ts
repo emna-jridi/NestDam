@@ -3,7 +3,6 @@ import { ConfigModule } from '@nestjs/config';
 import { AuthModule } from './auth/auth.module';
 import { DatabaseModule } from './database/database.module';
 import { UsersModule } from './users/users.module';
-import { ScanModule } from './scan/scan.module';
 import { VaultModule } from './vault/vault.module';
 import { AlertsModule } from './alerts/alerts.module';
 import { ReportModule } from './report/report.module';
@@ -19,7 +18,6 @@ import { DarkWebModule } from './darkweb/darkweb.module';
     DatabaseModule,
     UsersModule,
     AuthModule,
-    ScanModule,
     VaultModule,
     AlertsModule,
     ReportModule,
