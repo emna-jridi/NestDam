@@ -1,11 +1,18 @@
+// src/scan/core/scan-context.ts
+
 import { ScanType } from './ScanTypes';
+import { Finding } from './Finding';
 
 export interface ScanContext {
   scanId: string;
-  appPackage: string;
+  scanType: ScanType;
+  startedAt: Date;
 
-  initialScan: ScanType;
-  currentScan: ScanType;
+  findings: Finding[];
 
-  userRequestedUpgrade: boolean;
+  metadata: {
+    appName: string;
+    packageName: string;
+    version?: string;
+  };
 }
