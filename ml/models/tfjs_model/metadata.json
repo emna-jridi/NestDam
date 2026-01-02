@@ -1,0 +1,17 @@
+{
+  "features": [
+    "dangerous_permissions_count",
+    "has_internet",
+    "min_sdk_version",
+    "permissions_count",
+    "has_sms",
+    "has_location",
+    "has_camera",
+    "has_contacts",
+    "has_storage",
+    "is_system_app",
+    "app_size_mb",
+    "signature_valid"
+  ],
+  "threshold": 0.5
+}

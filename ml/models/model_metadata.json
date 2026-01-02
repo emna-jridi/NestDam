@@ -1,0 +1,63 @@
+{
+  "version": "2.0.0",
+  "trained_on": "Mendeley Android Permissions Dataset",
+  "training_date": "2026-01-02T12:09:15.076068",
+  "samples": {
+    "total": 28850,
+    "malware": 10000,
+    "benign": 18850
+  },
+  "features": [
+    "dangerous_permissions_count",
+    "has_internet",
+    "min_sdk_version",
+    "permissions_count",
+    "has_sms",
+    "has_location",
+    "has_camera",
+    "has_contacts",
+    "has_storage",
+    "is_system_app",
+    "app_size_mb",
+    "signature_valid"
+  ],
+  "feature_count": 12,
+  "scaler": {
+    "mean": [
+      0.0,
+      0.8344483344310029,
+      21.0,
+      4.931990710249922,
+      0.0550105722902007,
+      0.2915179035668481,
+      0.0,
+      0.10145932268016222,
+      0.448195778016569,
+      0.0,
+      10.0,
+      1.0
+    ],
+    "scale": [
+      1.0,
+      0.37167769854582206,
+      1.0,
+      4.483927280918871,
+      0.22800089742476692,
+      0.4544614565250336,
+      1.0,
+      0.30193596758497837,
+      0.49730908154260195,
+      1.0,
+      1.0,
+      1.0
+    ]
+  },
+  "performance": {
+    "accuracy": 0.45788561525129984,
+    "auc": 0.5361984084880635,
+    "f1_score": 0.49385113268608416,
+    "threshold": 0.5,
+    "optimal_threshold": 0.4830363094806671
+  },
+  "threshold": 0.4830363094806671
+}

@@ -1,0 +1,191 @@
+[
+  {
+    "id": "com.google.firebase",
+    "name": "Firebase",
+    "category": "Analytics",
+    "packageNames": ["com.google.firebase.analytics"],
+    "domains": ["google.com", "firebase.com"]
+  },
+  {
+    "id": "com.google.analytics",
+    "name": "Google Analytics",
+    "category": "Analytics",
+    "packageNames": ["com.google.analytics"],
+    "domains": ["google.com", "analytics.google.com"]
+  },
+  {
+    "id": "com.facebook.analytics",
+    "name": "Facebook Analytics",
+    "category": "Analytics",
+    "packageNames": ["com.facebook.analytics"],
+    "domains": ["facebook.com"]
+  },
+  {
+    "id": "com.appsflyer",
+    "name": "AppsFlyer",
+    "category": "Analytics",
+    "packageNames": ["com.appsflyer"],
+    "domains": ["appsflyer.com"]
+  },
+  {
+    "id": "com.adjust",
+    "name": "Adjust",
+    "category": "Analytics",
+    "packageNames": ["com.adjust"],
+    "domains": ["adjust.com"]
+  },
+  {
+    "id": "com.mixpanel",
+    "name": "Mixpanel",
+    "category": "Analytics",
+    "packageNames": ["com.mixpanel"],
+    "domains": ["mixpanel.com"]
+  },
+  {
+    "id": "com.amplitude",
+    "name": "Amplitude",
+    "category": "Analytics",
+    "packageNames": ["com.amplitude"],
+    "domains": ["amplitude.com"]
+  },
+  {
+    "id": "com.flurry.analytics",
+    "name": "Flurry Analytics",
+    "category": "Analytics",
+    "packageNames": ["com.flurry.analytics"],
+    "domains": ["flurry.com"]
+  },
+  {
+    "id": "com.google.admob",
+    "name": "Google AdMob",
+    "category": "Advertising",
+    "packageNames": ["com.google.admob"],
+    "domains": ["admob.google.com"]
+  },
+  {
+    "id": "com.facebook.ads",
+    "name": "Facebook Audience Network",
+    "category": "Advertising",
+    "packageNames": ["com.facebook.ads"],
+    "domains": ["facebook.com"]
+  },
+  {
+    "id": "com.startapp",
+    "name": "StartApp",
+    "category": "Advertising",
+    "packageNames": ["com.startapp"],
+    "domains": ["startapp.com"]
+  },
+  {
+    "id": "com.inmobi",
+    "name": "InMobi",
+    "category": "Advertising",
+    "packageNames": ["com.inmobi"],
+    "domains": ["inmobi.com"]
+  },
+  {
+    "id": "com.mopub",
+    "name": "MoPub",
+    "category": "Advertising",
+    "packageNames": ["com.mopub"],
+    "domains": ["mopub.com"]
+  },
+  {
+    "id": "com.mobilecore",
+    "name": "Mobilecore",
+    "category": "Advertising",
+    "packageNames": ["com.mobilecore"],
+    "domains": ["mobilecore.com"]
+  },
+  {
+    "id": "com.airpush",
+    "name": "Airpush",
+    "category": "Advertising",
+    "packageNames": ["com.airpush"],
+    "domains": ["airpush.com"]
+  },
+  {
+    "id": "com.google.play.services",
+    "name": "Google Play Services",
+    "category": "Cross-app",
+    "packageNames": ["com.google.android.gms"],
+    "domains": ["google.com"]
+  },
+  {
+    "id": "com.facebook.sdk",
+    "name": "Facebook SDK",
+    "category": "Cross-app",
+    "packageNames": ["com.facebook.sdk"],
+    "domains": ["facebook.com"]
+  },
+  {
+    "id": "com.twitter.sdk",
+    "name": "Twitter SDK",
+    "category": "Cross-app",
+    "packageNames": ["com.twitter.sdk"],
+    "domains": ["twitter.com"]
+  },
+  {
+    "id": "com.crashlytics",
+    "name": "Crashlytics",
+    "category": "Cross-app",
+    "packageNames": ["com.crashlytics"],
+    "domains": ["crashlytics.com"]
+  },
+  {
+    "id": "com.google.location",
+    "name": "Google Location Services",
+    "category": "Location",
+    "packageNames": ["com.google.android.gms.location"],
+    "domains": ["google.com"]
+  },
+  {
+    "id": "com.baidu.map",
+    "name": "Baidu Location",
+    "category": "Location",
+    "packageNames": ["com.baidu.map"],
+    "domains": ["baidu.com"]
+  },
+  {
+    "id": "com.alibaba.location",
+    "name": "Alibaba Location",
+    "category": "Location",
+    "packageNames": ["com.alibaba.location"],
+    "domains": ["alibaba.com"]
+  },
+  {
+    "id": "com.tencent.location",
+    "name": "Tencent Location",
+    "category": "Location",
+    "packageNames": ["com.tencent.location"],
+    "domains": ["tencent.com"]
+  },
+  {
+    "id": "com.zhihu",
+    "name": "Zhihu Analytics",
+    "category": "Analytics",
+    "packageNames": ["com.zhihu.analytics"],
+    "domains": ["zhihu.com"]
+  },
+  {
+    "id": "com.qq.analytics",
+    "name": "Tencent Analytics",
+    "category": "Analytics",
+    "packageNames": ["com.qq.analytics"],
+    "domains": ["qq.com"]
+  },
+  {
+    "id": "com.wechat.analytics",
+    "name": "WeChat Analytics",
+    "category": "Analytics",
+    "packageNames": ["com.tencent.mm"],
+    "domains": ["wechat.com"]
+  },
+  {
+    "id": "com.tiktok.analytics",
+    "name": "TikTok Analytics",
+    "category": "Analytics",
+    "packageNames": ["com.ss.android.ugc.tiktok"],
+    "domains": ["tiktok.com"]
+  }
+]

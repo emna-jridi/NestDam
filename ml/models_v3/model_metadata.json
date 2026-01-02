@@ -1,0 +1,53 @@
+{
+  "version": "3.0",
+  "model_type": "XGBoost (Calibrated)",
+  "created": "2026-01-02T13:29:14.211036",
+  "features": [
+    "System tools : mount and unmount filesystems (D)",
+    "System tools : prevent device from sleeping (D)",
+    "Your messages : read SMS or MMS (D)",
+    "Network communication : view network state (S)",
+    "Your location : fine (GPS) location (D)",
+    "Hardware controls : control vibrator (S)",
+    "Your accounts : access other Google services (D)",
+    "System tools : set wallpaper (S)",
+    "Hardware controls : record audio (D)",
+    "Network communication : receive data from Internet (S)",
+    "System tools : change Wi-Fi state (D)",
+    "Storage : modify/delete USB storage contents modify/delete SD card contents (D)",
+    "System tools : bluetooth administration (D)",
+    "Phone calls : read phone state and identity (D)",
+    "System tools : kill background processes (S)",
+    "System tools : make application always run (D)",
+    "Default : Access Email provider data (S)",
+    "System tools : display system-level alerts (D)",
+    "System tools : format external storage (D)",
+    "Your location : coarse (network-based) location (D)",
+    "System tools : change network connectivity (D)",
+    "Your personal information : read sensitive log data (D)",
+    "Your personal information : write Browser's history and bookmarks (D)",
+    "Network communication : full Internet access (D)",
+    "System tools : modify global system settings (D)",
+    "Network communication : view Wi-Fi state (S)",
+    "Your messages : send SMS-received broadcast (S)",
+    "Your accounts : discover known accounts (S)",
+    "Network communication : create Bluetooth connections (D)",
+    "System tools : retrieve running applications (D)"
+  ],
+  "num_features": 30,
+  "metrics": {
+    "accuracy": 0.6700173310225304,
+    "auc": 0.622746551724138,
+    "f1": 0.18562874251497005,
+    "precision": 0.6420118343195266,
+    "recall": 0.1085,
+    "optimal_threshold": 0.26215070486068726,
+    "optimal_f1": 0.5310306093389957
+  },
+  "confusion_matrix": {
+    "tn": 3649,
+    "fp": 121,
+    "fn": 1783,
+    "tp": 217
+  }
+}

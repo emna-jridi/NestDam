@@ -1,0 +1,214 @@
+{
+  "format": "layers-model",
+  "generatedBy": "ShadowGuard",
+  "convertedBy": "Custom Exporter v1.0",
+  "modelTopology": {
+    "class_name": "Sequential",
+    "config": {
+      "name": "malware_detector",
+      "layers": [
+        {
+          "class_name": "InputLayer",
+          "config": {
+            "batch_input_shape": [
+              null,
+              12
+            ],
+            "dtype": "float32",
+            "sparse": false,
+            "name": "features_input"
+          }
+        },
+        {
+          "class_name": "Dense",
+          "config": {
+            "units": 64,
+            "activation": "relu",
+            "use_bias": true,
+            "name": "dense_1"
+          }
+        },
+        {
+          "class_name": "BatchNormalization",
+          "config": {
+            "name": "bn_1"
+          }
+        },
+        {
+          "class_name": "Dropout",
+          "config": {
+            "rate": 0.3,
+            "name": "dropout_1"
+          }
+        },
+        {
+          "class_name": "Dense",
+          "config": {
+            "units": 32,
+            "activation": "relu",
+            "use_bias": true,
+            "name": "dense_2"
+          }
+        },
+        {
+          "class_name": "BatchNormalization",
+          "config": {
+            "name": "bn_2"
+          }
+        },
+        {
+          "class_name": "Dropout",
+          "config": {
+            "rate": 0.2,
+            "name": "dropout_2"
+          }
+        },
+        {
+          "class_name": "Dense",
+          "config": {
+            "units": 16,
+            "activation": "relu",
+            "use_bias": true,
+            "name": "dense_3"
+          }
+        },
+        {
+          "class_name": "Dense",
+          "config": {
+            "units": 1,
+            "activation": "sigmoid",
+            "use_bias": true,
+            "name": "output"
+          }
+        }
+      ]
+    },
+    "keras_version": "3.0.0",
+    "backend": "tensorflow"
+  },
+  "weightsManifest": [
+    {
+      "paths": [
+        "weights.bin"
+      ],
+      "weights": [
+        {
+          "name": "dense_1/kernel",
+          "shape": [
+            12,
+            64
+          ],
+          "dtype": "float32"
+        },
+        {
+          "name": "dense_1/bias",
+          "shape": [
+            64
+          ],
+          "dtype": "float32"
+        },
+        {
+          "name": "bn_1/gamma",
+          "shape": [
+            64
+          ],
+          "dtype": "float32"
+        },
+        {
+          "name": "bn_1/beta",
+          "shape": [
+            64
+          ],
+          "dtype": "float32"
+        },
+        {
+          "name": "bn_1/moving_mean",
+          "shape": [
+            64
+          ],
+          "dtype": "float32"
+        },
+        {
+          "name": "bn_1/moving_variance",
+          "shape": [
+            64
+          ],
+          "dtype": "float32"
+        },
+        {
+          "name": "dense_2/kernel",
+          "shape": [
+            64,
+            32
+          ],
+          "dtype": "float32"
+        },
+        {
+          "name": "dense_2/bias",
+          "shape": [
+            32
+          ],
+          "dtype": "float32"
+        },
+        {
+          "name": "bn_2/gamma",
+          "shape": [
+            32
+          ],
+          "dtype": "float32"
+        },
+        {
+          "name": "bn_2/beta",
+          "shape": [
+            32
+          ],
+          "dtype": "float32"
+        },
+        {
+          "name": "bn_2/moving_mean",
+          "shape": [
+            32
+          ],
+          "dtype": "float32"
+        },
+        {
+          "name": "bn_2/moving_variance",
+          "shape": [
+            32
+          ],
+          "dtype": "float32"
+        },
+        {
+          "name": "dense_3/kernel",
+          "shape": [
+            32,
+            16
+          ],
+          "dtype": "float32"
+        },
+        {
+          "name": "dense_3/bias",
+          "shape": [
+            16
+          ],
+          "dtype": "float32"
+        },
+        {
+          "name": "output/kernel",
+          "shape": [
+            16,
+            1
+          ],
+          "dtype": "float32"
+        },
+        {
+          "name": "output/bias",
+          "shape": [
+            1
+          ],
+          "dtype": "float32"
+        }
+      ]
+    }
+  ]
+}

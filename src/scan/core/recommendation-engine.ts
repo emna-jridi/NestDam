@@ -17,7 +17,7 @@ export class RecommendationEngine {
       if (
         result.securityScore < 70 ||
         result.privacyScore < 70 ||
-        result.findings.some(f => f.severity === 'HIGH')
+        result.findings.some((f: any) => f.severity === 'HIGH')
       ) {
         return {
           upgradeTo: ScanType.DEEP,
