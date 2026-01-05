@@ -1,9 +1,13 @@
-import { IsString, IsOptional, IsEnum, ValidateIf, IsNotEmpty } from 'class-validator';
+import { IsString, IsOptional, IsEnum, ValidateIf } from 'class-validator';
 
 export enum ScanLevel {
-  FAST = 'FAST',
   SMART = 'SMART',
   DEEP = 'DEEP',
+}
+
+export enum AnalysisType {
+  INSTALLED_APP = 'installed_app',
+  APK_UPLOAD = 'apk_upload',
 }
 
 export class StartScanDto {
@@ -23,5 +27,14 @@ export class StartScanDto {
 
   @IsEnum(ScanLevel)
   @IsOptional()
-  level: ScanLevel = ScanLevel.FAST;
+  level: ScanLevel = ScanLevel.SMART;
+
+  /**
+   * Derived on the backend when not provided:
+   * - installed_app when scanning installed packages
+   * - apk_upload when an APK file or URL is supplied
+   */
+  @IsEnum(AnalysisType)
+  @IsOptional()
+  analysisType?: AnalysisType;
 }

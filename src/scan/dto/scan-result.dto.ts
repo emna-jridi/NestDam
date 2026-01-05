@@ -10,7 +10,8 @@ export class ScanResultDto {
   versionCode: string;
   versionName: string;
   
-  level: 'FAST' | 'SMART' | 'DEEP';
+  level: 'SMART' | 'DEEP';
+  analysisType: 'installed_app' | 'apk_upload';
   status: 'COMPLETED' | 'FAILED' | 'IN_PROGRESS' | 'QUEUED';
   
   // Scoring
@@ -18,6 +19,9 @@ export class ScanResultDto {
   privacyScore: number; // 0-100
   globalRisk: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
   overallScore: number; // 0-100
+
+  confidenceScore: number; // 0-100
+  recommendDeepAnalysis: boolean;
   
   // Results
   ml?: MLResultDto;

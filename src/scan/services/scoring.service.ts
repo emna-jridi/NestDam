@@ -6,6 +6,33 @@ export class ScoringService {
   private readonly logger = new Logger(ScoringService.name);
 
   /**
+   * Confidence score (0-100) grows as malwareProbability moves away from the indecision band (0.5)
+   * and gains a small boost when a deeper scan level is used.
+   */
+  calculateConfidenceScore(malwareProbability: number, level: 'SMART' | 'DEEP'): number {
+    const distanceFromMid = Math.abs(malwareProbability - 0.5) * 2; // 0..1
+    const base = Math.min(Math.max(distanceFromMid, 0), 1);
+    const levelBoost = level === 'DEEP' ? 0.1 : 0; // modest boost for deeper analysis
+    const score = Math.min(base + levelBoost, 1) * 100;
+    return Math.round(score * 100) / 100;
+  }
+
+  /**
+   * Recommend DEEP when SMART finds meaningful risk signals.
+   */
+  recommendDeepAnalysis(
+    level: 'SMART' | 'DEEP',
+    malwareProbability: number,
+    globalRisk: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW',
+  ): boolean {
+    if (level === 'DEEP') {
+      return false;
+    }
+
+    return malwareProbability >= 0.35 || ['CRITICAL', 'HIGH'].includes(globalRisk);
+  }
+
+  /**
    * Calculate security score (0-100)
    * Formula: 100 - (malwareProbability × 50 + SAAT penalties + invalid signature (-20))
    */

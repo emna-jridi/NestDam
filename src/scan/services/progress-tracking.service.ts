@@ -17,14 +17,11 @@ export class ProgressTrackingService {
   /**
    * Initialize progress tracking
    */
-  async initProgress(scanId: string, level: string): Promise<void> {
+  async initProgress(scanId: string, level: string, packageName: string): Promise<void> {
     try {
       const steps = SCAN_PROGRESS_STEPS
         .filter((step) => {
           // Filter steps based on scan level
-          if (level === 'FAST' && ['tracker_detection', 'saat_analysis', 'cloud_processing'].includes(step)) {
-            return false;
-          }
           if (level === 'SMART' && step === 'cloud_processing') {
             return false;
           }
@@ -38,6 +35,7 @@ export class ProgressTrackingService {
 
       await this.progressModel.create({
         scanId,
+        packageName,
         percentage: 0,
         currentStep: steps[0].name,
         steps,

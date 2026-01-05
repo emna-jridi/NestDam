@@ -4,7 +4,7 @@ import { Document } from 'mongoose';
 @Schema({ timestamps: true, expireAfterSeconds: 2592000 }) // 30 days
 export class ScanCache extends Document {
   @Prop({ required: true, unique: true, index: true })
-  cacheKey: string; // SHA256(packageName + versionCode + level)
+  cacheKey: string; // SHA256(packageName + versionCode + level + analysisType)
 
   @Prop({ required: true, index: true })
   packageName: string;
@@ -12,8 +12,11 @@ export class ScanCache extends Document {
   @Prop({ required: true })
   versionCode: string;
 
-  @Prop({ required: true, enum: ['FAST', 'SMART', 'DEEP'] })
+  @Prop({ required: true, enum: ['SMART', 'DEEP'] })
   level: string;
+
+  @Prop({ required: true, enum: ['installed_app', 'apk_upload'] })
+  analysisType: string;
 
   @Prop({ type: Object, required: true })
   scanResult: Record<string, any>;

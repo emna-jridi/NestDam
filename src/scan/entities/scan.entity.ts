@@ -18,8 +18,11 @@ export class Scan extends Document {
   @Prop()
   versionName: string;
 
-  @Prop({ enum: ['FAST', 'SMART', 'DEEP'], default: 'FAST' })
+  @Prop({ enum: ['SMART', 'DEEP'], default: 'SMART' })
   level: string;
+
+  @Prop({ enum: ['installed_app', 'apk_upload'], default: 'installed_app' })
+  analysisType: string;
 
   @Prop({ enum: ['COMPLETED', 'FAILED', 'IN_PROGRESS', 'QUEUED'], default: 'QUEUED' })
   status: string;
@@ -35,6 +38,12 @@ export class Scan extends Document {
 
   @Prop({ type: Number, default: 0 })
   overallScore: number;
+
+  @Prop({ type: Number, default: 100 })
+  confidenceScore: number;
+
+  @Prop({ type: Boolean, default: false })
+  recommendDeepAnalysis: boolean;
 
   @Prop({ type: Object })
   ml: Record<string, any>;

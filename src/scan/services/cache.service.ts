@@ -9,7 +9,6 @@ import { ScanUtils } from '../utils';
 export class CacheService {
   private readonly logger = new Logger(CacheService.name);
   private readonly TTL_MAP = {
-    FAST: 7 * 24 * 60 * 60, // 7 days
     SMART: 3 * 24 * 60 * 60, // 3 days
     DEEP: 1 * 24 * 60 * 60, // 1 day
   };
@@ -21,15 +20,25 @@ export class CacheService {
   /**
    * Get cache key from packageName, versionCode, level
    */
-  private getCacheKey(packageName: string, versionCode: string, level: string): string {
-    return ScanUtils.calculateCacheKey(packageName, versionCode, level);
+  private getCacheKey(
+    packageName: string,
+    versionCode: string,
+    level: string,
+    analysisType: string,
+  ): string {
+    return ScanUtils.calculateCacheKey(packageName, versionCode, level, analysisType);
   }
 
   /**
    * Get cached scan result
    */
-  async getFromCache(packageName: string, versionCode: string, level: string): Promise<any | null> {
-    const cacheKey = this.getCacheKey(packageName, versionCode, level);
+  async getFromCache(
+    packageName: string,
+    versionCode: string,
+    level: string,
+    analysisType: string,
+  ): Promise<any | null> {
+    const cacheKey = this.getCacheKey(packageName, versionCode, level, analysisType);
 
     try {
       const cached = await this.cacheModel.findOne({ cacheKey }).lean();
@@ -59,13 +68,14 @@ export class CacheService {
     packageName: string,
     versionCode: string,
     level: string,
+    analysisType: string,
   ): Promise<void> {
-    const cacheKey = this.getCacheKey(packageName, versionCode, level);
+    const cacheKey = this.getCacheKey(packageName, versionCode, level, analysisType);
 
     try {
       // Get scan result from database
       // This would be done in the caller, but for now we'll just create a cache entry
-      const ttl = this.TTL_MAP[level] || this.TTL_MAP.FAST;
+      const ttl = this.TTL_MAP[level] || this.TTL_MAP.SMART;
       const expiresAt = new Date(Date.now() + ttl * 1000);
 
       await this.cacheModel.updateOne(
@@ -75,6 +85,7 @@ export class CacheService {
           packageName,
           versionCode,
           level,
+          analysisType,
           scanResult: { scanId }, // Placeholder - would be full result
           createdAt: new Date(),
           expiresAt,

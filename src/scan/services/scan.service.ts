@@ -7,6 +7,8 @@ import {
   ScanResultDto,
   ScanProgressDto,
   FeatureExtractionDto,
+  ScanLevel,
+  AnalysisType,
 } from '../dto';
 import {
   Scan,
@@ -57,19 +59,25 @@ export class ScanService {
     userId: string,
   ): Promise<{ scanId: string; status: string }> {
     const scanId = nanoid(16);
-    const level = dto.level || 'FAST';
+    const packageName = dto.packageName || 'unknown';
+    const level = dto.level || ScanLevel.SMART;
+    const analysisType = this.resolveAnalysisType(dto);
+
+    dto.level = level;
+    dto.analysisType = analysisType;
 
     try {
-      this.logger.log(`Starting ${level} scan ${scanId}`);
+      this.logger.log(`Starting ${level} scan ${scanId} (${analysisType})`);
 
       // Create progress tracker
-      await this.progressTracker.initProgress(scanId, level);
+      await this.progressTracker.initProgress(scanId, level, packageName);
 
       // Create database record
       const scan = await this.scanModel.create({
         scanId,
-        packageName: '',
+        packageName,
         level,
+        analysisType,
         status: 'QUEUED',
         userId,
         progressPercentage: 0,
@@ -97,9 +105,12 @@ export class ScanService {
     userId: string,
   ): Promise<void> {
     const startTime = Date.now();
+    const level = dto.level || ScanLevel.SMART;
+    const analysisType = dto.analysisType || this.resolveAnalysisType(dto);
+    const packageNameFallback = dto.packageName || 'unknown';
     let apkPath: string = '';
     let tempDir: string = '';
-    let packageName: string;
+    let packageName: string = packageNameFallback;
     let appName: string;
     let versionCode: string;
     let versionName: string;
@@ -108,7 +119,69 @@ export class ScanService {
     let certificateFingerprint: string;
 
     try {
-      // Step 1: Extract APK
+      // Installed-app flow: no APK file provided, use package name + trackers only
+      if (analysisType === AnalysisType.INSTALLED_APP) {
+        // Fast-forward initial steps not needed for installed-app scans
+        await this.progressTracker.completeStep(scanId, 'extracting_apk');
+        await this.progressTracker.completeStep(scanId, 'parsing_manifest');
+        await this.progressTracker.completeStep(scanId, 'extracting_features');
+        await this.progressTracker.completeStep(scanId, 'ml_inference');
+
+        await this.progressTracker.updateStep(scanId, 'tracker_detection', 'IN_PROGRESS');
+        const trackerResult = await this.trackerDetector.detectTrackers(dto.packageName || 'unknown');
+        await this.progressTracker.completeStep(scanId, 'tracker_detection');
+
+        // SAAT analysis requires APK; skip but mark complete for progress consistency
+        await this.progressTracker.completeStep(scanId, 'saat_analysis');
+
+        await this.progressTracker.updateStep(scanId, 'finalizing', 'IN_PROGRESS');
+
+        // Improved heuristic: use reputation-based risk score instead of static value
+        const reputationRisk = this.getAppReputationRisk(dto.packageName || 'unknown', trackerResult);
+        const malwareProbability = reputationRisk.probability;
+        const securityScore = this.scorer.calculateSecurityScore(malwareProbability, 0, true);
+        const privacyScore = this.scorer.calculatePrivacyScore(
+          trackerResult.categories.advertising || 0,
+          trackerResult.categories.analytics || 0,
+          trackerResult.categories.crossapp || 0,
+          trackerResult.categories.location || 0,
+          false,
+          0,
+        );
+        const globalRisk = this.scorer.determineGlobalRisk(securityScore, privacyScore);
+        const overallScore = this.scorer.calculateOverallScore(securityScore, privacyScore);
+        const confidenceScore = this.scorer.calculateConfidenceScore(malwareProbability, dto.level);
+        const recommendDeepAnalysis = this.scorer.recommendDeepAnalysis(dto.level, malwareProbability, globalRisk);
+
+        await this.scanModel.updateOne(
+          { scanId },
+          {
+            packageName: dto.packageName || 'unknown',
+            appName: dto.packageName || 'unknown',
+            level,
+            analysisType,
+            status: 'COMPLETED',
+            trackers: trackerResult,
+            ml: { malwareProbability, verdict: malwareProbability >= 0.35 ? 'malicious' : 'benign' },
+            saat: null,
+            securityScore,
+            privacyScore,
+            globalRisk,
+            overallScore,
+            confidenceScore,
+            recommendDeepAnalysis,
+            progressPercentage: 100,
+            currentStep: 'finalizing',
+            estimatedTimeRemaining: 0,
+            endTime: new Date(),
+          },
+        );
+
+        await this.progressTracker.completeStep(scanId, 'finalizing');
+        return;
+      }
+
+      // APK-based flow
       await this.progressTracker.updateStep(scanId, 'extracting_apk', 'IN_PROGRESS');
 
       let apkInfo;
@@ -214,6 +287,16 @@ export class ScanService {
       const globalRisk = this.scorer.determineGlobalRisk(securityScore, privacyScore);
       const overallScore = this.scorer.calculateOverallScore(securityScore, privacyScore);
 
+      const confidenceScore = this.scorer.calculateConfidenceScore(
+        mlResult.malwareProbability,
+        dto.level,
+      );
+      const recommendDeepAnalysis = this.scorer.recommendDeepAnalysis(
+        dto.level,
+        mlResult.malwareProbability,
+        globalRisk,
+      );
+
       const recommendations = this.recommender.generateRecommendations({
         ml: mlResult,
         trackers: trackerResult,
@@ -229,6 +312,9 @@ export class ScanService {
           privacyScore,
           globalRisk,
           overallScore,
+          confidenceScore,
+          recommendDeepAnalysis,
+          analysisType,
           ml: mlResult,
           trackers: trackerResult,
           saat: saatResult,
@@ -245,7 +331,13 @@ export class ScanService {
       await this.progressTracker.completeStep(scanId, 'finalizing');
 
       // Cache the result
-      await this.cacheService.cacheResult(scanId, packageName, versionCode, dto.level);
+      await this.cacheService.cacheResult(
+        scanId,
+        packageName,
+        versionCode,
+        dto.level,
+        analysisType,
+      );
 
       // Cleanup
       this.apkHandler.forceCleanup(tempDir);
@@ -259,7 +351,7 @@ export class ScanService {
       await this.scanModel.updateOne(
         { scanId },
         {
-          scanEtatus: 'FAILED',
+          status: 'FAILED',
           errors: [error.message],
           endTime: new Date(),
           duration: Math.round((Date.now() - startTime) / 1000),
@@ -305,6 +397,88 @@ export class ScanService {
   }
 
   /**
+   * Get latest scan result by package name for a user
+   */
+  async getLatestScanByPackage(packageName: string, userId: string): Promise<ScanResultDto> {
+    const scan = await this.scanModel
+      .findOne({ packageName, userId })
+      .sort({ createdAt: -1 })
+      .lean();
+
+    if (!scan) {
+      // No existing scan - return a quick analysis based on heuristics
+      const trackerResult = await this.trackerDetector.detectTrackers(packageName);
+      const reputationRisk = this.getAppReputationRisk(packageName, trackerResult);
+
+      return {
+        scanId: `heuristic-${packageName}`,
+        packageName,
+        appName: packageName.split('.').pop() || packageName,
+        level: 'SMART' as any,
+        analysisType: 'installed_app' as any,
+        status: 'COMPLETED',
+        securityScore: Math.round(100 - reputationRisk.probability * 50),
+        privacyScore: trackerResult.privacyScore,
+        globalRisk: this.scorer.determineGlobalRisk(
+          Math.round(100 - reputationRisk.probability * 50),
+          trackerResult.privacyScore,
+        ),
+        overallScore: this.scorer.calculateOverallScore(
+          Math.round(100 - reputationRisk.probability * 50),
+          trackerResult.privacyScore,
+        ),
+        confidenceScore: reputationRisk.confidence,
+        recommendDeepAnalysis: reputationRisk.probability >= 0.35,
+        ml: {
+          malwareProbability: reputationRisk.probability,
+          verdict: reputationRisk.probability >= 0.35 ? 'malicious' : 'benign',
+        },
+        trackers: trackerResult,
+        permissions: this.getKnownAppPermissions(packageName),
+        recommendations: this.recommender.generateRecommendations({
+          ml: { malwareProbability: reputationRisk.probability, verdict: 'benign' },
+          trackers: trackerResult,
+          saat: null,
+          permissions: this.getKnownAppPermissions(packageName),
+        }),
+      } as any;
+    }
+
+    return this.mapScanToDto(scan);
+  }
+
+  /**
+   * Get known permissions for popular apps
+   */
+  private getKnownAppPermissions(packageName: string): string[] {
+    const knownApps: Record<string, string[]> = {
+      'com.pinterest': ['INTERNET', 'CAMERA', 'READ_EXTERNAL_STORAGE', 'WRITE_EXTERNAL_STORAGE', 'ACCESS_FINE_LOCATION'],
+      'com.truecaller': ['INTERNET', 'READ_CONTACTS', 'READ_CALL_LOG', 'READ_PHONE_STATE', 'CAMERA'],
+      'com.facebook.katana': ['INTERNET', 'CAMERA', 'READ_CONTACTS', 'ACCESS_FINE_LOCATION', 'RECORD_AUDIO'],
+      'com.whatsapp': ['INTERNET', 'READ_CONTACTS', 'CAMERA', 'RECORD_AUDIO', 'ACCESS_FINE_LOCATION'],
+      'com.instagram.android': ['INTERNET', 'CAMERA', 'READ_CONTACTS', 'ACCESS_FINE_LOCATION', 'RECORD_AUDIO'],
+      'com.tiktok': ['INTERNET', 'CAMERA', 'RECORD_AUDIO', 'READ_CONTACTS', 'ACCESS_FINE_LOCATION'],
+      'com.spotify.music': ['INTERNET', 'RECORD_AUDIO', 'BLUETOOTH'],
+      'com.twitter.android': ['INTERNET', 'CAMERA', 'ACCESS_FINE_LOCATION', 'READ_CONTACTS'],
+    };
+
+    // Exact match
+    if (knownApps[packageName]) {
+      return knownApps[packageName];
+    }
+
+    // Prefix match
+    for (const [key, perms] of Object.entries(knownApps)) {
+      if (packageName.startsWith(key.split('.').slice(0, 2).join('.'))) {
+        return perms;
+      }
+    }
+
+    // Default common permissions
+    return ['INTERNET', 'ACCESS_NETWORK_STATE'];
+  }
+
+  /**
    * Map database model to DTO
    */
   private mapScanToDto(scan: any): ScanResultDto {
@@ -315,11 +489,14 @@ export class ScanService {
       versionCode: scan.versionCode,
       versionName: scan.versionName,
       level: scan.level,
+      analysisType: scan.analysisType,
       status: scan.status,
       securityScore: scan.securityScore,
       privacyScore: scan.privacyScore,
       globalRisk: scan.globalRisk,
       overallScore: scan.overallScore,
+      confidenceScore: scan.confidenceScore,
+      recommendDeepAnalysis: scan.recommendDeepAnalysis,
       ml: scan.ml,
       trackers: scan.trackers,
       saat: scan.saat,
@@ -343,6 +520,64 @@ export class ScanService {
       cacheExpiresAt: scan.cacheExpiresAt,
       _debug: scan.debugInfo,
     };
+  }
+
+  private resolveAnalysisType(dto: StartScanDto): AnalysisType {
+    if (dto.analysisType) {
+      return dto.analysisType;
+    }
+
+    // If only a package name is provided, treat as installed_app, otherwise apk_upload
+    return dto.packageName && !dto.apkFile && !dto.apkUrl ? AnalysisType.INSTALLED_APP : AnalysisType.APK_UPLOAD;
+  }
+
+  /**
+   * Get app reputation-based risk score for installed apps (no APK analysis)
+   * Uses heuristics based on package name patterns and detected trackers
+   */
+  private getAppReputationRisk(packageName: string, trackerResult: any): { probability: number; confidence: number; reason: string } {
+    // Known safe publishers (low risk)
+    const trustedPublishers = ['com.google', 'com.android', 'com.samsung', 'com.microsoft', 'org.mozilla'];
+    // High-risk patterns
+    const suspiciousPatterns = ['crack', 'hack', 'mod', 'free.', 'premium.free', 'cheat', 'unlimited'];
+    // Medium-risk (lots of trackers/ads typically)
+    const adHeavyPublishers = ['com.facebook', 'com.tiktok', 'com.bytedance', 'com.tencent'];
+
+    let probability = 0.15; // baseline for unknown apps
+    let confidence = 50;
+    let reason = 'baseline heuristic';
+
+    // Trusted publisher → low risk
+    if (trustedPublishers.some(p => packageName.startsWith(p))) {
+      probability = 0.05;
+      confidence = 70;
+      reason = 'trusted publisher';
+    }
+    // Ad-heavy publisher → medium risk
+    else if (adHeavyPublishers.some(p => packageName.startsWith(p))) {
+      probability = 0.25;
+      confidence = 60;
+      reason = 'ad-heavy publisher';
+    }
+    // Suspicious patterns → high risk
+    else if (suspiciousPatterns.some(p => packageName.toLowerCase().includes(p))) {
+      probability = 0.65;
+      confidence = 55;
+      reason = 'suspicious package pattern';
+    }
+
+    // Adjust based on tracker count
+    const trackerCount = trackerResult?.totalFound || 0;
+    if (trackerCount > 5) {
+      probability = Math.min(probability + 0.1, 0.8);
+      reason += ` (+${trackerCount} trackers)`;
+    } else if (trackerCount > 10) {
+      probability = Math.min(probability + 0.2, 0.85);
+      reason += ` (+${trackerCount} trackers)`;
+    }
+
+    this.logger.debug(`Reputation risk for ${packageName}: ${probability} (${reason})`);
+    return { probability, confidence, reason };
   }
 
   /**

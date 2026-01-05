@@ -21,6 +21,7 @@ import {
   ProgressTrackingService,
   N8NOrchestrationService,
 } from './services';
+import { FastMLScanService } from './services/fast-ml-scan.service';
 import { ScanController } from './scan.controller';
 
 @Module({
@@ -44,7 +45,8 @@ import { ScanController } from './scan.controller';
     CacheService,
     ProgressTrackingService,
     N8NOrchestrationService,
+    FastMLScanService,
   ],
-  exports: [ScanService],
+  exports: [ScanService, FastMLScanService],
 })
 export class ScanModule {}

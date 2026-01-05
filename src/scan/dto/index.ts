@@ -6,3 +6,4 @@ export * from './saat-result.dto';
 export * from './scan-result.dto';
 export * from './recommendation.dto';
 export * from './scan-progress.dto';
+export { ScanLevel, AnalysisType } from './start-scan.dto';
