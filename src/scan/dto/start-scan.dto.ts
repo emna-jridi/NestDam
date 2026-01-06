@@ -37,4 +37,8 @@ export class StartScanDto {
   @IsEnum(AnalysisType)
   @IsOptional()
   analysisType?: AnalysisType;
+
+  @IsEnum(['android', 'ios'])
+  @IsOptional()
+  platform: string = 'android';
 }

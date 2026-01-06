@@ -29,7 +29,7 @@ export class PasswordEntryController {
   constructor(
     private readonly passwordEntryService: PasswordEntryService,
     private readonly vaultService: VaultService,
-  ) {}
+  ) { }
 
   /**
    * POST /vault/passwords - Create a new password entry
@@ -39,7 +39,7 @@ export class PasswordEntryController {
   async create(@Request() req, @Body() dto: CreatePasswordEntryDto) {
     const userId = req.user.userId || req.user.sub;
     const vault = await this.vaultService.getVaultByUserId(userId);
-    
+
     const entry = await this.passwordEntryService.create(
       vault.id,
       userId,

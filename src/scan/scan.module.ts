@@ -21,6 +21,7 @@ import {
   ProgressTrackingService,
   N8NOrchestrationService,
   GeminiMLService,
+  AppSearchService,
 } from './services';
 import { FastMLScanService } from './services/fast-ml-scan.service';
 import { ScanController } from './scan.controller';
@@ -48,7 +49,8 @@ import { ScanController } from './scan.controller';
     ProgressTrackingService,
     N8NOrchestrationService,
     FastMLScanService,
+    AppSearchService,
   ],
   exports: [ScanService, FastMLScanService],
 })
-export class ScanModule {}
+export class ScanModule { }

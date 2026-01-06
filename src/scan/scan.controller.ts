@@ -16,9 +16,9 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiConsumes, ApiBody, ApiOperation, ApiResponse, ApiProperty } from '@nestjs/swagger';
 import { memoryStorage } from 'multer';
-import { ScanService } from './services';
+import { ScanService, AppSearchService } from './services';
 import { FastMLScanService } from './services/fast-ml-scan.service';
-import { StartScanDto, ScanLevel, AnalysisType } from './dto';
+import { StartScanDto, ScanLevel, AnalysisType, BatchScanDto } from './dto';
 
 // Mock auth guard - replace with your actual auth
 class AuthGuard {
@@ -32,7 +32,45 @@ export class ScanController {
   constructor(
     private scanService: ScanService,
     private fastMLScanService: FastMLScanService,
-  ) {}
+    private appSearchService: AppSearchService,
+  ) { }
+
+  /**
+   * Batch scan for multiple apps (e.g., from search or device list)
+   */
+  @Post('batch')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Batch scan for multiple apps' })
+  @ApiResponse({ status: 200, description: 'Batch scan results' })
+  @UseGuards(AuthGuard)
+  async batchScan(@Body() dto: BatchScanDto, @Request() req: any): Promise<any> {
+    // Use userId from DTO or fallback to auth context
+    const userId = dto.userHash || req.headers['x-user-id'] || req.user?.id;
+    if (!userId) {
+      throw new BadRequestException('userHash is required in body or as x-user-id header');
+    }
+    return this.scanService.startBatchScan(dto, userId);
+  }
+
+  /**
+   * Search for apps on Google Play Store
+   */
+  @Get('apps/search')
+  @ApiOperation({ summary: 'Search for apps on Play Store' })
+  @ApiResponse({ status: 200, description: 'List of matching apps' })
+  @UseGuards(AuthGuard)
+  async searchApps(@Query('q') query: string, @Query('limit') limit: string): Promise<any> {
+    if (!query) {
+      throw new BadRequestException('Search query (q) is required');
+    }
+    const parsedLimit = parseInt(limit) || 10;
+    const results = await this.appSearchService.search(query, parsedLimit);
+    return {
+      query,
+      count: results.length,
+      results,
+    };
+  }
 
   /**
    * Start a new scan - accepts packageName, file upload, or URL
@@ -54,7 +92,7 @@ export class ScanController {
     }),
   )
   @ApiConsumes('multipart/form-data')
-  @ApiOperation({ 
+  @ApiOperation({
     summary: 'Start APK scan',
     description: 'Start a security scan with SMART (fast, installed apps) or DEEP (comprehensive, with cloud analysis) mode. Accepts APK file upload, URL, or package name.'
   })
@@ -65,9 +103,9 @@ export class ScanController {
         apkFile: { type: 'string', format: 'binary', description: 'APK file to scan' },
         packageName: { type: 'string', description: 'Package name for installed app scan' },
         apkUrl: { type: 'string', description: 'URL to download APK from' },
-        level: { 
-          type: 'string', 
-          enum: ['SMART', 'DEEP'], 
+        level: {
+          type: 'string',
+          enum: ['SMART', 'DEEP'],
           default: 'SMART',
           description: 'SMART: Fast scan for installed apps (ML + trackers + SAAT). DEEP: Comprehensive scan with cloud processing (N8N orchestration).'
         },
@@ -79,8 +117,8 @@ export class ScanController {
       }
     }
   })
-  @ApiResponse({ 
-    status: 202, 
+  @ApiResponse({
+    status: 202,
     description: 'Scan queued successfully',
     schema: {
       example: {
@@ -138,8 +176,8 @@ export class ScanController {
    */
   @Get(':scanId')
   @ApiOperation({ summary: 'Get scan result' })
-  @ApiResponse({ 
-    status: 200, 
+  @ApiResponse({
+    status: 200,
     description: 'Scan result with security scores, analysis details, and recommendations',
     schema: {
       example: {
@@ -200,6 +238,28 @@ export class ScanController {
   }
 
   /**
+   * Get the latest scan for a user
+   */
+  @Get('latest/:userId')
+  @ApiOperation({ summary: 'Get latest scan for a user' })
+  @ApiResponse({ status: 200, description: 'Latest scan results' })
+  @UseGuards(AuthGuard)
+  async getLatest(@Param('userId') userId: string): Promise<any> {
+    return this.scanService.getLatestScan(userId);
+  }
+
+  /**
+   * Get scan statistics for a user
+   */
+  @Get('stats/:userId')
+  @ApiOperation({ summary: 'Get scan statistics for a user' })
+  @ApiResponse({ status: 200, description: 'Scan statistics' })
+  @UseGuards(AuthGuard)
+  async getStats(@Param('userId') userId: string): Promise<any> {
+    return this.scanService.getScanStatistics(userId);
+  }
+
+  /**
    * Webhook callback for N8N deep scan results
    */
   @Post('callback')
@@ -216,8 +276,8 @@ export class ScanController {
    */
   @Get('app/:packageName')
   @ApiOperation({ summary: 'Get app details by package name' })
-  @ApiResponse({ 
-    status: 200, 
+  @ApiResponse({
+    status: 200,
     description: 'Latest scan result for the specified package',
   })
   @UseGuards(AuthGuard)

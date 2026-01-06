@@ -24,6 +24,9 @@ export class Scan extends Document {
   @Prop({ enum: ['installed_app', 'apk_upload'], default: 'installed_app' })
   analysisType: string;
 
+  @Prop({ enum: ['android', 'ios'], default: 'android' })
+  platform: string;
+
   @Prop({ enum: ['COMPLETED', 'FAILED', 'IN_PROGRESS', 'QUEUED'], default: 'QUEUED' })
   status: string;
 

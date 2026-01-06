@@ -25,11 +25,12 @@ export class ScanResultDto {
   appName: string;
   versionCode: string;
   versionName: string;
-  
+
   level: 'SMART' | 'DEEP';
   analysisType: 'installed_app' | 'apk_upload';
+  platform: 'android' | 'ios';
   status: 'COMPLETED' | 'FAILED' | 'IN_PROGRESS' | 'QUEUED';
-  
+
   // Scoring
   securityScore: number; // 0-100
   privacyScore: number; // 0-100
@@ -38,16 +39,16 @@ export class ScanResultDto {
 
   confidenceScore: number; // 0-100
   recommendDeepAnalysis: boolean;
-  
+
   // Results
   ml?: MLResultDto;
   trackers?: TrackerResultDto;
   saat?: SAATResultDto;
   cloudAnalysis?: Record<string, any>;
-  
+
   // ML Hybrid Analysis (Gemini + TensorFlow)
   mlAnalysis?: MLAnalysisDto;
-  
+
   // Progress & Timing
   startTime: Date;
   endTime?: Date;
@@ -55,28 +56,28 @@ export class ScanResultDto {
   progressPercentage: number;
   currentStep?: string;
   estimatedTimeRemaining?: number; // seconds
-  
+
   // Recommendations
   recommendations: RecommendationDto[];
-  
+
   // Manifest info
   minimumSdkVersion?: number;
   targetSdkVersion?: number;
   permissions?: string[];
-  
+
   // Metadata
   certificateValid: boolean;
   certificateFingerprint?: string;
   signatureValid: boolean;
-  
+
   // Errors
   errors?: string[];
   warnings?: string[];
-  
+
   // Cache info
   fromCache: boolean;
   cacheExpiresAt?: Date;
-  
+
   // Debugging
   _debug?: {
     extractionErrors?: string[];

@@ -9,6 +9,10 @@ import {
   FeatureExtractionDto,
   ScanLevel,
   AnalysisType,
+  BatchScanDto,
+  BatchScanResultDto,
+  BatchAppResultDto,
+  Platform,
 } from '../dto';
 import {
   Scan,
@@ -52,7 +56,7 @@ export class ScanService {
     private cacheService: CacheService,
     private progressTracker: ProgressTrackingService,
     private n8nOrchestrator: N8NOrchestrationService,
-  ) {}
+  ) { }
 
   /**
    * Start a new scan
@@ -81,6 +85,7 @@ export class ScanService {
         packageName,
         level,
         analysisType,
+        platform: dto.platform || 'android',
         status: 'QUEUED',
         userId,
         progressPercentage: 0,
@@ -455,7 +460,7 @@ export class ScanService {
 
     // Step 1: Detect trackers
     const trackerResult = await this.trackerDetector.detectTrackers(packageName);
-    
+
     // Step 2: Get reputation-based risk (TensorFlow heuristics)
     const reputationRisk = this.getAppReputationRisk(packageName, trackerResult);
     const permissions = this.getKnownAppPermissions(packageName);
@@ -481,16 +486,16 @@ export class ScanService {
     // Step 5: Combine TensorFlow + Gemini results (hybrid scoring)
     const tfProbability = reputationRisk.probability;
     const geminiProbability = geminiResult.malwareProbability;
-    
+
     // Weighted average: TensorFlow 40%, Gemini 60% (Gemini is more accurate)
     const hybridProbability = tfProbability * 0.4 + geminiProbability * 0.6;
-    
+
     // Calculate final scores
     const securityScore = Math.round(100 - hybridProbability * 50);
     const privacyScore = trackerResult.privacyScore;
     const globalRisk = geminiResult.riskLevel; // Use Gemini's risk level (more nuanced)
     const overallScore = this.scorer.calculateOverallScore(securityScore, privacyScore);
-    
+
     // Confidence: average of both sources
     const confidenceScore = Math.round((reputationRisk.confidence + geminiResult.confidence) / 2);
     const recommendDeepAnalysis = hybridProbability >= 0.35 || geminiResult.riskLevel === 'HIGH' || geminiResult.riskLevel === 'CRITICAL';
@@ -530,8 +535,8 @@ export class ScanService {
       overallScore,
       confidenceScore,
       recommendDeepAnalysis,
-      ml: { 
-        malwareProbability: hybridProbability, 
+      ml: {
+        malwareProbability: hybridProbability,
         verdict,
         tensorflowProbability: tfProbability,
         geminiProbability: geminiProbability,
@@ -557,8 +562,8 @@ export class ScanService {
       overallScore,
       confidenceScore,
       recommendDeepAnalysis,
-      ml: { 
-        malwareProbability: hybridProbability, 
+      ml: {
+        malwareProbability: hybridProbability,
         verdict,
       },
       mlAnalysis,
@@ -616,6 +621,7 @@ export class ScanService {
       versionName: scan.versionName,
       level: scan.level,
       analysisType: scan.analysisType,
+      platform: scan.platform || 'android',
       status: scan.status,
       securityScore: scan.securityScore,
       privacyScore: scan.privacyScore,
@@ -707,12 +713,106 @@ export class ScanService {
   }
 
   /**
+   * Start a batch scan for multiple apps (e.g., from iOS app research or Android device list)
+   */
+  async startBatchScan(
+    dto: BatchScanDto,
+    userId: string,
+  ): Promise<BatchScanResultDto> {
+    const scanId = nanoid(16);
+    this.logger.log(`Starting batch scan ${scanId} for ${dto.apps.length} apps on ${dto.platform}`);
+
+    const results: BatchAppResultDto[] = [];
+    let totalAlerts = 0;
+    const riskDistribution = { critical: 0, high: 0, medium: 0, low: 0 };
+    let aggregateScore = 0;
+
+    // Process each app in the batch
+    // In a real production app, this would be queued or processed concurrently with limits
+    for (const app of dto.apps) {
+      const packageName = app.packageName;
+
+      // Perform a background "hybrid" style analysis (reputation based)
+      // Since we don't have the APK file, we rely on tracker detection and heuristics
+      const trackerResult = await this.trackerDetector.detectTrackers(packageName);
+      const reputation = this.getAppReputationRisk(packageName, trackerResult);
+
+      const securityScore = Math.round(100 - (reputation.probability * 100));
+      const privacyScore = trackerResult.privacyScore;
+      const overallScore = Math.round((securityScore + privacyScore) / 2);
+
+      const riskLevel = this.scorer.determineGlobalRisk(securityScore, privacyScore);
+
+      // Update distribution
+      riskDistribution[riskLevel.toLowerCase()]++;
+      totalAlerts += trackerResult.totalFound;
+      aggregateScore += overallScore;
+
+      results.push({
+        packageName,
+        name: app.name || packageName,
+        version: app.version,
+        score: overallScore,
+        riskLevel,
+        alerts: trackerResult.trackers.filter(t => t.found).map(t => `Detected tracker: ${t.name}`),
+        trackers: trackerResult.trackers.filter(t => t.found).map(t => t.name),
+        permissions: {
+          dangerous: [], // We don't have permissions info for simple package-based scan on iOS
+          total: 0
+        }
+      });
+
+      // Save individual scan record for history visibility
+      await this.scanModel.create({
+        scanId: `${scanId}-${packageName}`,
+        packageName,
+        appName: app.name || packageName,
+        level: ScanLevel.SMART,
+        analysisType: AnalysisType.INSTALLED_APP,
+        platform: dto.platform || 'android',
+        status: 'COMPLETED',
+        userId,
+        securityScore,
+        privacyScore,
+        overallScore,
+        globalRisk: riskLevel,
+        trackers: trackerResult,
+        startTime: new Date(),
+        endTime: new Date(),
+        progressPercentage: 100,
+        currentStep: 'COMPLETED',
+      });
+    }
+
+    const avgScore = dto.apps.length > 0 ? Math.round(aggregateScore / dto.apps.length) : 100;
+
+    return {
+      scanId,
+      userHash: dto.userHash,
+      totalApps: dto.apps.length,
+      results,
+      summary: {
+        avgScore,
+        riskDistribution,
+        totalAlerts,
+        mostDangerousApps: results
+          .filter(r => ['HIGH', 'CRITICAL'].includes(r.riskLevel))
+          .sort((a, b) => a.score - b.score)
+          .slice(0, 3)
+          .map(r => ({ packageName: r.packageName, name: r.name, score: r.score }))
+      },
+      createdAt: new Date().toISOString(),
+      platform: dto.platform || Platform.ANDROID
+    };
+  }
+
+  /**
    * Get ML model information
    */
   getMLModelInfo(): any {
     const modelInfo = this.mlDetector.getModelInfo();
     const memoryInfo = this.mlDetector.getMemoryInfo();
-    
+
     return {
       ...modelInfo,
       memory: memoryInfo,
@@ -723,6 +823,92 @@ export class ScanService {
         featureCount: modelInfo.features.length,
         note: 'Features aligned with training model as of Jan 1, 2026'
       }
+    };
+  }
+
+  /**
+   * Get the latest scan for a user
+   */
+  async getLatestScan(userId: string): Promise<any> {
+    const latestScan = await this.scanModel
+      .findOne({ userId })
+      .sort({ startTime: -1 })
+      .exec();
+
+    if (!latestScan) {
+      return {
+        status: 'NONE',
+        message: 'No scans found for this user',
+      };
+    }
+
+    // Identify if this was part of a batch
+    const baseScanId = latestScan.scanId.split('-')[0];
+    const batchScans = await this.scanModel
+      .find({ scanId: new RegExp(`^${baseScanId}`) })
+      .exec();
+
+    const results = batchScans.map(s => this.mapScanToAppScanResult(s));
+    const riskyAppsCount = results.filter(r => ['HIGH', 'CRITICAL'].includes(r.riskLevel)).length;
+
+    return {
+      scanId: baseScanId,
+      status: 'COMPLETED',
+      overallScore: latestScan.overallScore,
+      globalRisk: latestScan.globalRisk,
+      totalApps: batchScans.length,
+      riskyAppsCount,
+      scanDate: latestScan.startTime.toISOString(),
+      results,
+    };
+  }
+
+  /**
+   * Get scan statistics for a user
+   */
+  async getScanStatistics(userId: string): Promise<any> {
+    const scans = await this.scanModel.find({ userId }).exec();
+
+    if (scans.length === 0) {
+      return {
+        totalScans: 0,
+        averageScore: 100,
+        riskDistribution: { critical: 0, high: 0, medium: 0, low: 0 },
+        totalAlerts: 0,
+        trends: []
+      };
+    }
+
+    const distribution = { critical: 0, high: 0, medium: 0, low: 0 };
+    let totalScore = 0;
+    let totalAlerts = 0;
+
+    scans.forEach(scan => {
+      const risk = (scan.globalRisk || 'low').toLowerCase();
+      if (distribution.hasOwnProperty(risk)) {
+        distribution[risk]++;
+      }
+      totalScore += scan.overallScore || 100;
+      totalAlerts += (scan.trackers?.totalFound || 0);
+    });
+
+    return {
+      totalScans: scans.length,
+      averageScore: Math.round(totalScore / scans.length),
+      riskDistribution: distribution,
+      totalAlerts,
+      lastScanDate: scans.sort((a, b) => b.startTime.getTime() - a.startTime.getTime())[0].startTime.toISOString(),
+    };
+  }
+
+  private mapScanToAppScanResult(scan: Scan): any {
+    return {
+      packageName: scan.packageName,
+      name: scan.appName || scan.packageName,
+      score: scan.overallScore,
+      riskLevel: scan.globalRisk,
+      trackers: scan.trackers?.trackers?.filter(t => t.found).map(t => t.name) || [],
+      status: scan.status
     };
   }
 }

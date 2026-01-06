@@ -10,6 +10,7 @@ export * from './cache.service';
 export * from './progress-tracking.service';
 export * from './n8n-orchestration.service';
 export * from './scan.service';
+export * from './app-search.service';
 
 // Export constant for other services
 export const CACHING_SERVICE = 'CACHING_SERVICE';
