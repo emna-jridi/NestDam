@@ -134,6 +134,21 @@ export class AlertsService {
       .sort({ createdAt: -1 })
       .lean();
   }
+
+  async markAlertAsRead(alertId: string, userId: string) {
+    return this.alertModel.updateOne(
+      { _id: alertId, userId },
+      { $set: { read: true } }
+    );
+  }
+
+  async markAllAlertsAsRead(userId: string) {
+    return this.alertModel.updateMany(
+      { userId, read: false },
+      { $set: { read: true } }
+    );
+  }
+
   // alerts.service.ts
   async getTokens(userId: string) {
     return this.tokenModel.find({ userId }).lean();

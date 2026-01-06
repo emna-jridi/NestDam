@@ -14,7 +14,7 @@ export class Alert {
   @Prop({ required: true })
   event: string;
 
-  @Prop()
+  @Prop({ default: 'info' })
   severity: 'critical' | 'high' | 'medium' | 'info';
 
   @Prop({ type: Object })
@@ -25,6 +25,9 @@ export class Alert {
 
   @Prop({ default: false })
   notified: boolean;
+
+  @Prop({ default: false })
+  read: boolean;
 }
 
 export const AlertSchema = SchemaFactory.createForClass(Alert);

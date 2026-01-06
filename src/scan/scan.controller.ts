@@ -6,6 +6,7 @@ import {
   UploadedFile,
   Body,
   Param,
+  Query,
   HttpCode,
   HttpStatus,
   BadRequestException,
@@ -123,7 +124,11 @@ export class ScanController {
       dto.analysisType = file || body.apkUrl ? AnalysisType.APK_UPLOAD : AnalysisType.INSTALLED_APP;
     }
 
-    const userId = req.user?.id || 'anonymous';
+    // Extract userId from request body (sent by Android app) or fall back to auth context
+    const userId = body.userId || req.user?.id;
+    if (!userId) {
+      throw new BadRequestException('userId is required in request body or as authenticated user');
+    }
 
     return this.scanService.startScan(dto, userId);
   }
@@ -180,10 +185,18 @@ export class ScanController {
   @UseGuards(AuthGuard)
   async getHistory(
     @Request() req: any,
-    @Body() query: { limit?: number; skip?: number },
-  ): Promise<any[]> {
-    const userId = req.user?.id || 'anonymous';
-    return this.scanService.getUserScans(userId, query.limit || 20, query.skip || 0);
+    @Query('userId') queryUserId: string,
+    @Query('limit') limit: string,
+    @Query('skip') skip: string,
+  ): Promise<any> {
+    // Extract userId from query, headers, or auth context
+    const userId = queryUserId || req.headers['x-user-id'] || req.user?.id;
+    if (!userId) {
+      throw new BadRequestException('userId is required');
+    }
+    const parsedLimit = parseInt(limit) || 20;
+    const parsedSkip = parseInt(skip) || 0;
+    return this.scanService.getUserScans(userId, parsedLimit, parsedSkip);
   }
 
   /**
@@ -208,8 +221,15 @@ export class ScanController {
     description: 'Latest scan result for the specified package',
   })
   @UseGuards(AuthGuard)
-  async getAppDetails(@Param('packageName') packageName: string, @Request() req: any): Promise<any> {
-    const userId = req.user?.id || 'anonymous';
+  async getAppDetails(
+    @Param('packageName') packageName: string,
+    @Request() req: any,
+  ): Promise<any> {
+    // Extract userId from headers or auth context
+    const userId = req.headers['x-user-id'] || req.user?.id;
+    if (!userId) {
+      throw new BadRequestException('userId is required (send via x-user-id header)');
+    }
     return this.scanService.getLatestScanByPackage(packageName, userId);
   }
 

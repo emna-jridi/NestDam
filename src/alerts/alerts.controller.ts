@@ -4,6 +4,8 @@ import {
   Body,
   Req,
   Get,
+  Patch,
+  Param,
   HttpException,
   HttpStatus,
 } from '@nestjs/common';
@@ -42,6 +44,18 @@ export class AlertsController {
   @Get()
   async getMyAlerts(@Req() req: any) {
     return this.alertsService.getUserAlerts(req.user.userId);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Patch(':id/read')
+  async markAsRead(@Req() req: any, @Param('id') alertId: string) {
+    return this.alertsService.markAlertAsRead(alertId, req.user.userId);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Patch('read-all')
+  async markAllAsRead(@Req() req: any) {
+    return this.alertsService.markAllAlertsAsRead(req.user.userId);
   }
 
   // PUBLIC TEST ROUTE — works without JWT

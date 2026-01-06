@@ -20,6 +20,7 @@ import {
   CacheService,
   ProgressTrackingService,
   N8NOrchestrationService,
+  GeminiMLService,
 } from './services';
 import { FastMLScanService } from './services/fast-ml-scan.service';
 import { ScanController } from './scan.controller';
@@ -38,6 +39,7 @@ import { ScanController } from './scan.controller';
     APKFileHandlerService,
     FeatureExtractionService,
     MLMalwareDetectorService,
+    GeminiMLService,
     TrackerDetectionService,
     SAATAnalysisService,
     ScoringService,

@@ -30,6 +30,8 @@ import { RecommendationsService } from './recommendations.service';
 import { CacheService } from './cache.service';
 import { ProgressTrackingService } from './progress-tracking.service';
 import { N8NOrchestrationService } from './n8n-orchestration.service';
+import { GeminiMLService, GeminiAnalysisResult, AppAnalysisInput } from './gemini-ml.service';
+import { MLAnalysisDto } from '../dto/scan-result.dto';
 
 @Injectable()
 export class ScanService {
@@ -42,6 +44,7 @@ export class ScanService {
     private apkHandler: APKFileHandlerService,
     private featureExtractor: FeatureExtractionService,
     private mlDetector: MLMalwareDetectorService,
+    private geminiML: GeminiMLService,
     private trackerDetector: TrackerDetectionService,
     private saatAnalyzer: SAATAnalysisService,
     private scorer: ScoringService,
@@ -385,15 +388,46 @@ export class ScanService {
   }
 
   /**
-   * List user scans
+   * List user scans with pagination metadata
    */
-  async getUserScans(userId: string, limit = 20, skip = 0): Promise<any[]> {
-    return this.scanModel
-      .find({ userId })
-      .sort({ createdAt: -1 })
-      .limit(limit)
-      .skip(skip)
-      .lean();
+  async getUserScans(userId: string, limit = 20, skip = 0): Promise<{
+    scans: any[];
+    total: number;
+    limit: number;
+    offset: number;
+  }> {
+    const [scans, total] = await Promise.all([
+      this.scanModel
+        .find({ userId })
+        .sort({ createdAt: -1 })
+        .limit(limit)
+        .skip(skip)
+        .lean(),
+      this.scanModel.countDocuments({ userId })
+    ]);
+
+    return {
+      scans: scans.map((scan: any) => ({
+        scanId: scan.scanId,
+        status: scan.status,
+        totalApps: 1,  // Each scan is one app
+        scannedApps: scan.status === 'COMPLETED' ? 1 : 0,
+        averageScore: scan.overallScore || 0,
+        highRiskApps: ['CRITICAL', 'HIGH'].includes(scan.globalRisk) ? 1 : 0,
+        mediumRiskApps: scan.globalRisk === 'MEDIUM' ? 1 : 0,
+        lowRiskApps: scan.globalRisk === 'LOW' ? 1 : 0,
+        createdAt: scan.createdAt ? new Date(scan.createdAt).toISOString() : new Date().toISOString(),
+        completedAt: scan.endTime ? new Date(scan.endTime).toISOString() : null,
+        duration: scan.duration || null,
+        packageName: scan.packageName,
+        appName: scan.appName,
+        globalRisk: scan.globalRisk,
+        overallScore: scan.overallScore,
+      })),
+      total,
+      limit,
+      offset: skip
+    };
   }
 
   /**
@@ -406,45 +440,137 @@ export class ScanService {
       .lean();
 
     if (!scan) {
-      // No existing scan - return a quick analysis based on heuristics
-      const trackerResult = await this.trackerDetector.detectTrackers(packageName);
-      const reputationRisk = this.getAppReputationRisk(packageName, trackerResult);
-
-      return {
-        scanId: `heuristic-${packageName}`,
-        packageName,
-        appName: packageName.split('.').pop() || packageName,
-        level: 'SMART' as any,
-        analysisType: 'installed_app' as any,
-        status: 'COMPLETED',
-        securityScore: Math.round(100 - reputationRisk.probability * 50),
-        privacyScore: trackerResult.privacyScore,
-        globalRisk: this.scorer.determineGlobalRisk(
-          Math.round(100 - reputationRisk.probability * 50),
-          trackerResult.privacyScore,
-        ),
-        overallScore: this.scorer.calculateOverallScore(
-          Math.round(100 - reputationRisk.probability * 50),
-          trackerResult.privacyScore,
-        ),
-        confidenceScore: reputationRisk.confidence,
-        recommendDeepAnalysis: reputationRisk.probability >= 0.35,
-        ml: {
-          malwareProbability: reputationRisk.probability,
-          verdict: reputationRisk.probability >= 0.35 ? 'malicious' : 'benign',
-        },
-        trackers: trackerResult,
-        permissions: this.getKnownAppPermissions(packageName),
-        recommendations: this.recommender.generateRecommendations({
-          ml: { malwareProbability: reputationRisk.probability, verdict: 'benign' },
-          trackers: trackerResult,
-          saat: null,
-          permissions: this.getKnownAppPermissions(packageName),
-        }),
-      } as any;
+      // No existing scan - perform hybrid analysis (TensorFlow + Gemini)
+      return this.performHybridAnalysis(packageName, userId);
     }
 
     return this.mapScanToDto(scan);
+  }
+
+  /**
+   * Perform hybrid ML analysis using TensorFlow + Gemini
+   */
+  private async performHybridAnalysis(packageName: string, userId: string): Promise<ScanResultDto> {
+    this.logger.log(`🔬 Starting hybrid ML analysis for ${packageName}`);
+
+    // Step 1: Detect trackers
+    const trackerResult = await this.trackerDetector.detectTrackers(packageName);
+    
+    // Step 2: Get reputation-based risk (TensorFlow heuristics)
+    const reputationRisk = this.getAppReputationRisk(packageName, trackerResult);
+    const permissions = this.getKnownAppPermissions(packageName);
+
+    // Step 3: Prepare input for Gemini analysis
+    const geminiInput: AppAnalysisInput = {
+      packageName,
+      appName: packageName.split('.').pop() || packageName,
+      permissions,
+      trackers: trackerResult.trackers.map(t => ({
+        name: t.name,
+        category: t.category,
+      })),
+      isSystemApp: false,
+      signatureValid: true,
+    };
+
+    // Step 4: Call Gemini for intelligent analysis
+    this.logger.log(`🤖 Calling Gemini API for ${packageName}...`);
+    const geminiResult = await this.geminiML.analyzeApp(geminiInput);
+    this.logger.log(`✅ Gemini analysis complete: ${geminiResult.verdict} (${geminiResult.confidence}% confidence)`);
+
+    // Step 5: Combine TensorFlow + Gemini results (hybrid scoring)
+    const tfProbability = reputationRisk.probability;
+    const geminiProbability = geminiResult.malwareProbability;
+    
+    // Weighted average: TensorFlow 40%, Gemini 60% (Gemini is more accurate)
+    const hybridProbability = tfProbability * 0.4 + geminiProbability * 0.6;
+    
+    // Calculate final scores
+    const securityScore = Math.round(100 - hybridProbability * 50);
+    const privacyScore = trackerResult.privacyScore;
+    const globalRisk = geminiResult.riskLevel; // Use Gemini's risk level (more nuanced)
+    const overallScore = this.scorer.calculateOverallScore(securityScore, privacyScore);
+    
+    // Confidence: average of both sources
+    const confidenceScore = Math.round((reputationRisk.confidence + geminiResult.confidence) / 2);
+    const recommendDeepAnalysis = hybridProbability >= 0.35 || geminiResult.riskLevel === 'HIGH' || geminiResult.riskLevel === 'CRITICAL';
+    const verdict = geminiResult.verdict;
+
+    // Step 6: Build ML analysis object with explanations
+    const mlAnalysis: MLAnalysisDto = {
+      explanation: geminiResult.explanation,
+      recommendations: geminiResult.recommendations,
+      riskFactors: geminiResult.riskFactors,
+      safetyTips: geminiResult.safetyTips,
+      analysisDetails: geminiResult.analysisDetails,
+      analysisSource: this.geminiML.isAvailable() ? 'hybrid' : 'tensorflow',
+    };
+
+    // Log scores for debugging
+    this.logger.log(
+      `📊 Hybrid scores for ${packageName}: TF=${(tfProbability * 100).toFixed(1)}%, Gemini=${(geminiProbability * 100).toFixed(1)}%, Final=${(hybridProbability * 100).toFixed(1)}%`
+    );
+    this.logger.log(
+      `📊 Scores for ${packageName}: security=${securityScore}, privacy=${privacyScore}, overall=${overallScore}, confidence=${confidenceScore}`
+    );
+
+    // Step 7: Save scan to database
+    const scanId = nanoid(16);
+    await this.scanModel.create({
+      scanId,
+      packageName,
+      appName: packageName.split('.').pop() || packageName,
+      level: ScanLevel.SMART,
+      analysisType: AnalysisType.INSTALLED_APP,
+      status: 'COMPLETED',
+      userId,
+      securityScore,
+      privacyScore,
+      globalRisk,
+      overallScore,
+      confidenceScore,
+      recommendDeepAnalysis,
+      ml: { 
+        malwareProbability: hybridProbability, 
+        verdict,
+        tensorflowProbability: tfProbability,
+        geminiProbability: geminiProbability,
+      },
+      mlAnalysis,
+      trackers: trackerResult,
+      permissions,
+      progressPercentage: 100,
+      currentStep: 'finalizing',
+      endTime: new Date(),
+    });
+
+    return {
+      scanId,
+      packageName,
+      appName: packageName.split('.').pop() || packageName,
+      level: 'SMART' as any,
+      analysisType: 'installed_app' as any,
+      status: 'COMPLETED',
+      securityScore,
+      privacyScore,
+      globalRisk,
+      overallScore,
+      confidenceScore,
+      recommendDeepAnalysis,
+      ml: { 
+        malwareProbability: hybridProbability, 
+        verdict,
+      },
+      mlAnalysis,
+      trackers: trackerResult,
+      permissions,
+      recommendations: this.recommender.generateRecommendations({
+        ml: { malwareProbability: hybridProbability, verdict },
+        trackers: trackerResult,
+        saat: null,
+        permissions,
+      }),
+    } as any;
   }
 
   /**

@@ -11,6 +11,10 @@ import { UsersModule } from '../users/users.module';
 import { MailModule } from '../mail/mail.module';
 import { User, UserSchema } from '../users/entities/user.entity';
 import { ResetToken, ResetTokenSchema } from './entities/reset-token.schema';
+import { BiometricDevice, BiometricDeviceSchema } from './entities/biometric-device.schema';
+import { BiometricChallenge, BiometricChallengeSchema } from './entities/biometric-challenge.schema';
+import { BiometricService } from './biometric.service';
+import { BiometricController } from './biometric.controller';
 
 @Module({
   imports: [
@@ -29,10 +33,12 @@ import { ResetToken, ResetTokenSchema } from './entities/reset-token.schema';
     MongooseModule.forFeature([
       { name: User.name, schema: UserSchema },
       { name: ResetToken.name, schema: ResetTokenSchema },
+      { name: BiometricDevice.name, schema: BiometricDeviceSchema },
+      { name: BiometricChallenge.name, schema: BiometricChallengeSchema },
     ]),
   ],
-  controllers: [AuthController],
-  providers: [AuthService, JwtStrategy, JwtAuthGuard],
-  exports: [AuthService, JwtStrategy, JwtAuthGuard, PassportModule, JwtModule],
+  controllers: [AuthController, BiometricController],
+  providers: [AuthService, BiometricService, JwtStrategy, JwtAuthGuard],
+  exports: [AuthService, BiometricService, JwtStrategy, JwtAuthGuard, PassportModule, JwtModule],
 })
 export class AuthModule {}

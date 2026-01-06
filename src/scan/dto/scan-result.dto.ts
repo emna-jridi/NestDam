@@ -3,6 +3,22 @@ import { TrackerResultDto } from './tracker-result.dto';
 import { SAATResultDto } from './saat-result.dto';
 import { RecommendationDto } from './recommendation.dto';
 
+/**
+ * ML Analysis explanation and recommendations from hybrid analysis
+ */
+export interface MLAnalysisDto {
+  explanation: string;
+  recommendations: string[];
+  riskFactors: string[];
+  safetyTips: string[];
+  analysisDetails: {
+    permissionsAnalysis: string;
+    trackersAnalysis: string;
+    behaviorAnalysis: string;
+  };
+  analysisSource: 'tensorflow' | 'gemini' | 'hybrid';
+}
+
 export class ScanResultDto {
   scanId: string;
   packageName: string;
@@ -28,6 +44,9 @@ export class ScanResultDto {
   trackers?: TrackerResultDto;
   saat?: SAATResultDto;
   cloudAnalysis?: Record<string, any>;
+  
+  // ML Hybrid Analysis (Gemini + TensorFlow)
+  mlAnalysis?: MLAnalysisDto;
   
   // Progress & Timing
   startTime: Date;

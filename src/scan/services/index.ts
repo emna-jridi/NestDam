@@ -1,6 +1,7 @@
 export * from './apk-file-handler.service';
 export * from './feature-extraction.service';
 export * from './ml-malware-detector.service';
+export * from './gemini-ml.service';
 export * from './tracker-detection.service';
 export * from './saat-analysis.service';
 export * from './scoring.service';
