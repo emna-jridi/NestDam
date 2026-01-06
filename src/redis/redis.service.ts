@@ -16,7 +16,11 @@ export class RedisService {
     }
   }
 
-  async set<T = any>(key: string, value: T, ttlSeconds?: number): Promise<void> {
+  async set<T = any>(
+    key: string,
+    value: T,
+    ttlSeconds?: number,
+  ): Promise<void> {
     const payload = JSON.stringify(value);
     if (ttlSeconds && ttlSeconds > 0) {
       await this.client.set(key, payload, { EX: ttlSeconds });
@@ -25,7 +29,26 @@ export class RedisService {
     }
   }
 
-  async del(key: string): Promise<void> {
-    await this.client.del(key);
+  async del(...keys: string[]): Promise<void> {
+    if (keys.length === 0) return;
+    await this.client.del(keys);
+  }
+
+  async keys(pattern: string): Promise<string[]> {
+    // Use SCAN instead of KEYS for production (KEYS blocks Redis)
+    const keys: string[] = [];
+    let cursor = 0;
+
+    do {
+      const result = await this.client.scan(cursor, {
+        MATCH: pattern,
+        COUNT: 100,
+      });
+      cursor = typeof result === 'object' ? result.cursor : result[0];
+      const foundKeys = typeof result === 'object' ? result.keys : result[1];
+      keys.push(...foundKeys);
+    } while (cursor !== 0);
+
+    return keys;
   }
 }

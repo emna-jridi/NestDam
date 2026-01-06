@@ -28,6 +28,7 @@ import { PlayStoreService } from '../external-apis/play-store.service';
 import { PermissionAnalyzerService } from '../analysis/permission-analyzer.service';
 import { getRiskColor } from './shared/utils/risk-color.util';
 import { EtipService } from 'src/external-apis/etip.service';
+import { InsightsService } from '../insights/insights.service';
 
 @Injectable()
 export class ScanService {
@@ -46,6 +47,7 @@ export class ScanService {
     private playStoreService: PlayStoreService,
     private permissionAnalyzer: PermissionAnalyzerService,
     private readonly etipService: EtipService,
+    private readonly insightsService?: InsightsService,
   ) {}
   //android
   async analyzeInstalledApps(userHash: string, apps: InstalledAppDto[]) {
@@ -64,6 +66,11 @@ export class ScanService {
         report: { results },
         summary,
       });
+
+      // Invalidate insights cache after successful scan
+      if (this.insightsService) {
+        await this.insightsService.invalidateInsightsCache(userHash);
+      }
 
       return {
         scanId: scan.id.toString(),
@@ -95,6 +102,11 @@ export class ScanService {
         report: { results },
         summary,
       });
+
+      // Invalidate insights cache after successful scan
+      if (this.insightsService) {
+        await this.insightsService.invalidateInsightsCache(userHash);
+      }
 
       return {
         scanId: scan.id.toString(),

@@ -16,6 +16,7 @@ import { ScanAnalyzerService } from './services/scan-analyzer.service';
 import { ScanComparisonService } from './services/scan-comparison.service';
 import { ScanStatisticsService } from './services/scan-statistics.service';
 import { ScanSummaryService } from './services/scan-summary.service';
+import { InsightsModule } from '../insights/insights.module';
 @Module({
   imports: [
     MongooseModule.forFeature([
@@ -25,6 +26,7 @@ import { ScanSummaryService } from './services/scan-summary.service';
     ExternalApisModule,
     AppRegistryModule,
     AnalysisModule,
+    InsightsModule, // Import InsightsModule to access InsightsService
   ],
   controllers: [ScanController],
   providers: [

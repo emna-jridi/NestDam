@@ -2,7 +2,10 @@ import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { Scan } from '../scan/schemas/scan.schema';
-import { SecurityInsight, SecurityInsightDocument } from './schemas/security-insight.schema';
+import {
+  SecurityInsight,
+  SecurityInsightDocument,
+} from './schemas/security-insight.schema';
 import { ScanService } from '../scan/scan.service';
 import { AITipGeneratorService } from '../privacy-tips/services/ai-tip-generator.service';
 import { RedisService } from '../redis/redis.service';
@@ -34,7 +37,6 @@ export class InsightsService {
     @InjectModel(Scan.name) private scanModel: Model<Scan>,
     @InjectModel(SecurityInsight.name)
     private insightModel: Model<SecurityInsightDocument>,
-    private scanService: ScanService,
     private aiTipGenerator: AITipGeneratorService,
     private redisService: RedisService,
   ) {}
@@ -47,17 +49,24 @@ export class InsightsService {
     deviceId?: string,
     week?: string,
     includeRecommendations = true,
+    forceRefresh = false,
   ): Promise<WeeklyInsightsResponseDto> {
-    // Check Redis cache first
+    // Check Redis cache first (skip if forceRefresh is true)
     const cacheKey = `insights:weekly:${userId}:${deviceId || 'all'}:${
       week || 'current'
     }`;
-    const cached = await this.redisService.get<WeeklyInsightsResponseDto>(
-      cacheKey,
-    );
-    if (cached) {
-      this.logger.debug(`Cache hit for weekly insights: ${cacheKey}`);
-      return cached;
+
+    if (!forceRefresh) {
+      const cached =
+        await this.redisService.get<WeeklyInsightsResponseDto>(cacheKey);
+      if (cached) {
+        this.logger.debug(`Cache hit for weekly insights: ${cacheKey}`);
+        return cached;
+      }
+    } else {
+      this.logger.debug(
+        `Force refresh requested for weekly insights: ${cacheKey}`,
+      );
     }
 
     // Calculate date range for the week
@@ -135,17 +144,24 @@ export class InsightsService {
     deviceId?: string,
     month?: string,
     includeRecommendations = true,
+    forceRefresh = false,
   ): Promise<MonthlyInsightsResponseDto> {
-    // Check Redis cache first
+    // Check Redis cache first (skip if forceRefresh is true)
     const cacheKey = `insights:monthly:${userId}:${deviceId || 'all'}:${
       month || 'current'
     }`;
-    const cached = await this.redisService.get<MonthlyInsightsResponseDto>(
-      cacheKey,
-    );
-    if (cached) {
-      this.logger.debug(`Cache hit for monthly insights: ${cacheKey}`);
-      return cached;
+
+    if (!forceRefresh) {
+      const cached =
+        await this.redisService.get<MonthlyInsightsResponseDto>(cacheKey);
+      if (cached) {
+        this.logger.debug(`Cache hit for monthly insights: ${cacheKey}`);
+        return cached;
+      }
+    } else {
+      this.logger.debug(
+        `Force refresh requested for monthly insights: ${cacheKey}`,
+      );
     }
 
     // Calculate date range for the month
@@ -458,11 +474,7 @@ export class InsightsService {
   /**
    * Calculate general summary
    */
-  private async calculateSummary(
-    scans: any[],
-    startDate: Date,
-    endDate: Date,
-  ) {
+  private async calculateSummary(scans: any[], startDate: Date, endDate: Date) {
     const scores = scans
       .map((s) => s.summary?.avgScore || s.score || 0)
       .filter((s) => s > 0);
@@ -620,9 +632,8 @@ export class InsightsService {
         permissionStats: issues.permissionStats,
       };
 
-      const aiResult = await this.aiTipGenerator.generatePersonalizedTips(
-        userDataSummary,
-      );
+      const aiResult =
+        await this.aiTipGenerator.generatePersonalizedTips(userDataSummary);
 
       // Parse AI recommendations
       const recommendations = this.parseAIRecommendations(
@@ -697,7 +708,10 @@ Provide recommendations with priority (high/medium/low), category, title, descri
   /**
    * Parse AI recommendations
    */
-  private parseAIRecommendations(aiTips: any[], issues: any): RecommendationDto[] {
+  private parseAIRecommendations(
+    aiTips: any[],
+    issues: any,
+  ): RecommendationDto[] {
     return aiTips.map((tip) => ({
       priority: (tip.priority || 'medium') as 'high' | 'medium' | 'low',
       category: tip.category || 'general',
@@ -705,8 +719,14 @@ Provide recommendations with priority (high/medium/low), category, title, descri
       description: tip.content || tip.description || '',
       actionUrl: `/permissions?filter=${tip.category || 'all'}`,
       impact: {
-        privacyScoreIncrease: tip.priority === 'high' ? 5 : tip.priority === 'medium' ? 3 : 1,
-        privacyImprovement: tip.priority === 'high' ? 'High' : tip.priority === 'medium' ? 'Medium' : 'Low',
+        privacyScoreIncrease:
+          tip.priority === 'high' ? 5 : tip.priority === 'medium' ? 3 : 1,
+        privacyImprovement:
+          tip.priority === 'high'
+            ? 'High'
+            : tip.priority === 'medium'
+              ? 'Medium'
+              : 'Low',
       },
     }));
   }
@@ -749,8 +769,9 @@ Provide recommendations with priority (high/medium/low), category, title, descri
       });
     }
 
-    const topPermission = (Object.entries(issues.permissionStats) as [string, number][])
-      .sort((a, b) => b[1] - a[1])[0];
+    const topPermission = (
+      Object.entries(issues.permissionStats) as [string, number][]
+    ).sort((a, b) => b[1] - a[1])[0];
 
     if (topPermission && topPermission[1] > 5) {
       recommendations.push({
@@ -806,10 +827,12 @@ Provide recommendations with priority (high/medium/low), category, title, descri
       }
     });
 
-    const privacyScore = Array.from(dailyData.entries()).map(([date, data]) => ({
-      date,
-      score: data.score,
-    }));
+    const privacyScore = Array.from(dailyData.entries()).map(
+      ([date, data]) => ({
+        date,
+        score: data.score,
+      }),
+    );
 
     const riskCount = Array.from(dailyData.entries()).map(([date, data]) => ({
       date,
@@ -842,9 +865,7 @@ Provide recommendations with priority (high/medium/low), category, title, descri
       weekEnd.setDate(weekEnd.getDate() + 6);
 
       const weekScans = scans.filter(
-        (s) =>
-          s.createdAt >= weekStart &&
-          s.createdAt <= weekEnd,
+        (s) => s.createdAt >= weekStart && s.createdAt <= weekEnd,
       );
 
       if (weekScans.length > 0) {
@@ -885,11 +906,7 @@ Provide recommendations with priority (high/medium/low), category, title, descri
   /**
    * Calculate general trends
    */
-  private async calculateTrends(
-    scans: any[],
-    startDate: Date,
-    endDate: Date,
-  ) {
+  private async calculateTrends(scans: any[], startDate: Date, endDate: Date) {
     const weeklyTrends = await this.calculateMonthlyTrends(scans, {
       startDate,
       endDate,
@@ -957,7 +974,10 @@ Provide recommendations with priority (high/medium/low), category, title, descri
       });
     }
 
-    if (summary.privacyScore.trend === 'up' && summary.privacyScore.change >= 5) {
+    if (
+      summary.privacyScore.trend === 'up' &&
+      summary.privacyScore.change >= 5
+    ) {
       achievements.push({
         title: 'Privacy Champion',
         description: 'Significantly improved your privacy score',
@@ -1044,11 +1064,62 @@ Provide recommendations with priority (high/medium/low), category, title, descri
    * Get week number
    */
   private getWeekNumber(date: Date): number {
-    const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+    const d = new Date(
+      Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()),
+    );
     const dayNum = d.getUTCDay() || 7;
     d.setUTCDate(d.getUTCDate() + 4 - dayNum);
     const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
     return Math.ceil(((d.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
   }
-}
 
+  /**
+   * Invalidate insights cache for a user/device
+   * Called after a new scan is completed
+   */
+  async invalidateInsightsCache(
+    userId: string,
+    deviceId?: string,
+  ): Promise<void> {
+    try {
+      this.logger.debug(
+        `Invalidating insights cache for user: ${userId}, device: ${deviceId || 'all'}`,
+      );
+
+      // Patterns to invalidate
+      const patterns: string[] = [
+        `insights:weekly:${userId}:all:*`,
+        `insights:monthly:${userId}:all:*`,
+        `insights:recommendations:${userId}:all:*`,
+      ];
+
+      if (deviceId) {
+        patterns.push(
+          `insights:weekly:${userId}:${deviceId}:*`,
+          `insights:monthly:${userId}:${deviceId}:*`,
+          `insights:recommendations:${userId}:${deviceId}:*`,
+        );
+      }
+
+      // Delete all matching keys
+      let deletedCount = 0;
+      for (const pattern of patterns) {
+        const keys = await this.redisService.keys(pattern);
+        if (keys.length > 0) {
+          await this.redisService.del(...keys);
+          deletedCount += keys.length;
+          this.logger.debug(
+            `Deleted ${keys.length} keys matching pattern: ${pattern}`,
+          );
+        }
+      }
+
+      this.logger.log(
+        `✅ Invalidated ${deletedCount} insights cache keys for user: ${userId}`,
+      );
+    } catch (error) {
+      this.logger.error('Failed to invalidate insights cache', error);
+      // Don't throw - cache invalidation failure shouldn't break the scan
+    }
+  }
+}

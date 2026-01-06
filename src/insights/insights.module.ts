@@ -7,7 +7,6 @@ import {
   SecurityInsightSchema,
 } from './schemas/security-insight.schema';
 import { Scan, ScanSchema } from '../scan/schemas/scan.schema';
-import { ScanModule } from '../scan/scan.module';
 import { PrivacyTipsModule } from '../privacy-tips/privacy-tips.module';
 import { RedisModule } from '../redis/redis.module';
 
@@ -17,7 +16,6 @@ import { RedisModule } from '../redis/redis.module';
       { name: SecurityInsight.name, schema: SecurityInsightSchema },
       { name: Scan.name, schema: ScanSchema },
     ]),
-    ScanModule,
     PrivacyTipsModule,
     RedisModule,
   ],
@@ -26,5 +24,3 @@ import { RedisModule } from '../redis/redis.module';
   exports: [InsightsService],
 })
 export class InsightsModule {}
-
-

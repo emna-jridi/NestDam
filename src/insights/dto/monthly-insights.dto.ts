@@ -22,6 +22,14 @@ export class MonthlyInsightsQueryDto {
   @IsOptional()
   @IsBoolean()
   includeRecommendations?: boolean = true;
+
+  @ApiPropertyOptional({
+    description: 'Force refresh (bypass cache)',
+    default: false,
+  })
+  @IsOptional()
+  @IsBoolean()
+  forceRefresh?: boolean = false;
 }
 
 export class MonthlySummaryDto {
@@ -109,4 +117,3 @@ export class MonthlyInsightsResponseDto {
   @ApiProperty({ type: [AchievementDto] })
   achievements: AchievementDto[];
 }
-

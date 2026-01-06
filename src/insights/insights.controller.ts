@@ -49,11 +49,13 @@ export class InsightsController {
   ): Promise<WeeklyInsightsResponseDto> {
     try {
       const userId = req.user.userId;
+      const forceRefresh = query.forceRefresh === true;
       return await this.insightsService.getWeeklyInsights(
         userId,
         query.deviceId,
         query.week,
         query.includeRecommendations !== false,
+        forceRefresh,
       );
     } catch (error: any) {
       throw new BadRequestException(error.message);
@@ -74,11 +76,13 @@ export class InsightsController {
   ): Promise<MonthlyInsightsResponseDto> {
     try {
       const userId = req.user.userId;
+      const forceRefresh = query.forceRefresh === true;
       return await this.insightsService.getMonthlyInsights(
         userId,
         query.deviceId,
         query.month,
         query.includeRecommendations !== false,
+        forceRefresh,
       );
     } catch (error: any) {
       throw new BadRequestException(error.message);
@@ -111,5 +115,3 @@ export class InsightsController {
     }
   }
 }
-
-

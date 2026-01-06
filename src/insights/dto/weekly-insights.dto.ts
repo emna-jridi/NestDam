@@ -8,7 +8,8 @@ export class WeeklyInsightsQueryDto {
   deviceId?: string;
 
   @ApiPropertyOptional({
-    description: 'ISO8601 date (any date in the week), defaults to current week',
+    description:
+      'ISO8601 date (any date in the week), defaults to current week',
     example: '2025-01-15',
   })
   @IsOptional()
@@ -22,6 +23,14 @@ export class WeeklyInsightsQueryDto {
   @IsOptional()
   @IsBoolean()
   includeRecommendations?: boolean = true;
+
+  @ApiPropertyOptional({
+    description: 'Force refresh (bypass cache)',
+    default: false,
+  })
+  @IsOptional()
+  @IsBoolean()
+  forceRefresh?: boolean = false;
 }
 
 export class PrivacyScoreDto {
@@ -56,13 +65,18 @@ export class WeeklySummaryDto {
 }
 
 export class HighlightDto {
-  @ApiProperty({ example: 'improvement', enum: ['improvement', 'warning', 'info'] })
+  @ApiProperty({
+    example: 'improvement',
+    enum: ['improvement', 'warning', 'info'],
+  })
   type: string;
 
   @ApiProperty({ example: 'Privacy Score Improved' })
   title: string;
 
-  @ApiProperty({ example: 'Your privacy score increased by 2 points this week' })
+  @ApiProperty({
+    example: 'Your privacy score increased by 2 points this week',
+  })
   description: string;
 
   @ApiProperty({ example: 'trending-up' })
@@ -159,5 +173,3 @@ export class WeeklyInsightsResponseDto {
   @ApiProperty({ type: WeeklyTrendsDto })
   trends: WeeklyTrendsDto;
 }
-
-
