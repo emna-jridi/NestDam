@@ -5,6 +5,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
+import { ConfigService } from '@nestjs/config';
 import { UsersService } from '../users/users.service';
 import { LoginDto } from './dto/login.dto';
 import * as bcrypt from 'bcrypt';
@@ -28,6 +29,7 @@ export class AuthService {
     private mailService: MailService,
     @InjectModel(ResetToken.name) private resetTokenModel: Model<ResetToken>,
     @InjectModel(User.name) private UserModel: Model<User>,
+    private configService: ConfigService,
   ) {}
 
   // ================================================
@@ -94,7 +96,7 @@ export class AuthService {
   async refreshToken(refreshToken: string) {
     try {
       const payload = this.jwtService.verify(refreshToken, {
-        secret: 'your-refresh-secret-change-in-production',
+        secret: this.configService.getOrThrow<string>('JWT_REFRESH_SECRET'),
       });
 
       const user = await this.usersService.findByEmail(payload.email);
@@ -307,7 +309,7 @@ export class AuthService {
 
     const accessToken = this.jwtService.sign(payload);
     const refreshToken = this.jwtService.sign(payload, {
-      secret: 'your-refresh-secret-change-in-production',
+      secret: this.configService.getOrThrow<string>('JWT_REFRESH_SECRET'),
       expiresIn: '7d',
     });
 

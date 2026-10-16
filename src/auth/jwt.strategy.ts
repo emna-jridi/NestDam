@@ -17,10 +17,10 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
-      secretOrKey: configService.get<string>('JWT_SECRET') || 'your-secret-key-change-in-production',
+      secretOrKey: configService.getOrThrow<string>('JWT_SECRET'),
     });
     
-    const secret = configService.get<string>('JWT_SECRET') || 'your-secret-key-change-in-production';
+    const secret = configService.getOrThrow<string>('JWT_SECRET');
     this.logger.log(`[JWT Strategy] Initialized with secret length: ${secret.length}`);
   }
 

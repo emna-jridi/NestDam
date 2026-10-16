@@ -9,6 +9,7 @@ import {
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { JwtService } from '@nestjs/jwt';
+import { ConfigService } from '@nestjs/config';
 import * as crypto from 'crypto';
 import { BiometricDevice, BiometricDeviceDocument } from './entities/biometric-device.schema';
 import { BiometricChallenge, BiometricChallengeDocument } from './entities/biometric-challenge.schema';
@@ -40,6 +41,7 @@ export class BiometricService {
     @InjectModel(User.name)
     private userModel: Model<UserDocument>,
     private jwtService: JwtService,
+    private configService: ConfigService,
   ) {}
 
   // ================================================
@@ -449,7 +451,7 @@ export class BiometricService {
     });
 
     const refreshToken = this.jwtService.sign(payload, {
-      secret: 'your-refresh-secret-change-in-production',
+      secret: this.configService.getOrThrow<string>('JWT_REFRESH_SECRET'),
       expiresIn: '7d',
     });
 
