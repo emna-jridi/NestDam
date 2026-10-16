@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Model } from 'mongoose';
 import { InjectModel } from '@nestjs/mongoose';
 import { nanoid } from 'nanoid';
@@ -376,10 +376,11 @@ export class ScanService {
   /**
    * Get scan result by ID
    */
-  async getScanResult(scanId: string): Promise<ScanResultDto> {
-    const scan = await this.scanModel.findOne({ scanId }).lean();
+  async getScanResult(scanId: string, userId: string): Promise<ScanResultDto> {
+    const scan = await this.scanModel.findOne({ scanId, userId }).lean();
     if (!scan) {
-      throw new Error(`Scan ${scanId} not found`);
+      // Same answer whether the scan doesn't exist or belongs to someone else
+      throw new NotFoundException(`Scan ${scanId} not found`);
     }
 
     return this.mapScanToDto(scan);
@@ -388,7 +389,17 @@ export class ScanService {
   /**
    * Get scan progress
    */
-  async getScanProgress(scanId: string): Promise<ScanProgressDto> {
+  async getScanProgress(scanId: string, userId: string): Promise<ScanProgressDto> {
+    // Progress lives in the cache without an owner, so check ownership against the scan record.
+    // Batch scans store one record per app as `<scanId>-<packageName>`.
+    const escaped = scanId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const owned = await this.scanModel.exists({
+      userId,
+      $or: [{ scanId }, { scanId: { $regex: `^${escaped}-` } }],
+    });
+    if (!owned) {
+      throw new NotFoundException(`Scan ${scanId} not found`);
+    }
     return this.progressTracker.getProgress(scanId);
   }
 
@@ -845,7 +856,7 @@ export class ScanService {
     // Identify if this was part of a batch
     const baseScanId = latestScan.scanId.split('-')[0];
     const batchScans = await this.scanModel
-      .find({ scanId: new RegExp(`^${baseScanId}`) })
+      .find({ userId, scanId: new RegExp(`^${baseScanId}`) })
       .exec();
 
     const results = batchScans.map(s => this.mapScanToAppScanResult(s));

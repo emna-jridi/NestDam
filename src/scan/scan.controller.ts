@@ -40,12 +40,7 @@ export class ScanController {
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
   async batchScan(@Body() dto: BatchScanDto, @Request() req: any): Promise<any> {
-    // Use authenticated userId from JWT payload
-    const userId = req.user?.userId || req.user?.id || req.user?.sub || dto.userHash || req.headers['x-user-id'];
-    if (!userId) {
-      throw new BadRequestException('userId is required');
-    }
-    return this.scanService.startBatchScan(dto, userId);
+    return this.scanService.startBatchScan(dto, req.user.userId);
   }
 
   /**
@@ -160,13 +155,34 @@ export class ScanController {
       dto.analysisType = file || body.apkUrl ? AnalysisType.APK_UPLOAD : AnalysisType.INSTALLED_APP;
     }
 
-    // Extract userId from auth context or request body
-    const userId = req.user?.userId || req.user?.id || req.user?.sub || body.userId;
-    if (!userId) {
-      throw new BadRequestException('userId is required');
-    }
+    return this.scanService.startScan(dto, req.user.userId);
+  }
 
-    return this.scanService.startScan(dto, userId);
+  // 'latest' and 'stats' must be declared before ':scanId' or Express routes them as a scan id.
+  // The user always comes from the JWT, never from the URL.
+
+  /**
+   * Get the authenticated user's latest scan
+   */
+  @Get('latest')
+  @ApiOperation({ summary: 'Get my latest scan' })
+  @ApiResponse({ status: 200, description: 'Latest scan results' })
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  async getLatest(@Request() req: any): Promise<any> {
+    return this.scanService.getLatestScan(req.user.userId);
+  }
+
+  /**
+   * Get the authenticated user's scan statistics
+   */
+  @Get('stats')
+  @ApiOperation({ summary: 'Get my scan statistics' })
+  @ApiResponse({ status: 200, description: 'Scan statistics' })
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  async getStats(@Request() req: any): Promise<any> {
+    return this.scanService.getScanStatistics(req.user.userId);
   }
 
   /**
@@ -198,8 +214,8 @@ export class ScanController {
   })
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
-  async getScanResult(@Param('scanId') scanId: string): Promise<any> {
-    return this.scanService.getScanResult(scanId);
+  async getScanResult(@Param('scanId') scanId: string, @Request() req: any): Promise<any> {
+    return this.scanService.getScanResult(scanId, req.user.userId);
   }
 
   /**
@@ -210,8 +226,8 @@ export class ScanController {
   @ApiResponse({ status: 200, description: 'Current scan progress' })
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
-  async getScanProgress(@Param('scanId') scanId: string): Promise<any> {
-    return this.scanService.getScanProgress(scanId);
+  async getScanProgress(@Param('scanId') scanId: string, @Request() req: any): Promise<any> {
+    return this.scanService.getScanProgress(scanId, req.user.userId);
   }
 
   /**
@@ -224,42 +240,12 @@ export class ScanController {
   @UseGuards(JwtAuthGuard)
   async getHistory(
     @Request() req: any,
-    @Query('userId') queryUserId: string,
     @Query('limit') limit: string,
     @Query('skip') skip: string,
   ): Promise<any> {
-    // Extract userId from query, headers, or auth context
-    const userId = queryUserId || req.user?.userId || req.user?.id || req.user?.sub || req.headers['x-user-id'];
-    if (!userId) {
-      throw new BadRequestException('userId is required');
-    }
     const parsedLimit = parseInt(limit) || 20;
     const parsedSkip = parseInt(skip) || 0;
-    return this.scanService.getUserScans(userId, parsedLimit, parsedSkip);
-  }
-
-  /**
-   * Get the latest scan for a user
-   */
-  @Get('latest/:userId')
-  @ApiOperation({ summary: 'Get latest scan for a user' })
-  @ApiResponse({ status: 200, description: 'Latest scan results' })
-  @ApiBearerAuth()
-  @UseGuards(JwtAuthGuard)
-  async getLatest(@Param('userId') userId: string): Promise<any> {
-    return this.scanService.getLatestScan(userId);
-  }
-
-  /**
-   * Get scan statistics for a user
-   */
-  @Get('stats/:userId')
-  @ApiOperation({ summary: 'Get scan statistics for a user' })
-  @ApiResponse({ status: 200, description: 'Scan statistics' })
-  @ApiBearerAuth()
-  @UseGuards(JwtAuthGuard)
-  async getStats(@Param('userId') userId: string): Promise<any> {
-    return this.scanService.getScanStatistics(userId);
+    return this.scanService.getUserScans(req.user.userId, parsedLimit, parsedSkip);
   }
 
   /**
@@ -289,12 +275,7 @@ export class ScanController {
     @Param('packageName') packageName: string,
     @Request() req: any,
   ): Promise<any> {
-    // Extract userId from auth context or headers
-    const userId = req.user?.userId || req.user?.id || req.user?.sub || req.headers['x-user-id'];
-    if (!userId) {
-      throw new BadRequestException('userId is required (send via x-user-id header or Bearer auth)');
-    }
-    return this.scanService.getLatestScanByPackage(packageName, userId);
+    return this.scanService.getLatestScanByPackage(packageName, req.user.userId);
   }
 
   /**
