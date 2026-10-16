@@ -64,8 +64,8 @@ export class BiometricController {
     @Request() req,
     @Body() dto: RegisterBiometricDeviceDto,
   ) {
-    this.logger.log(`[API] Register device for user: ${req.user.sub}`);
-    return this.biometricService.registerDevice(req.user.sub, dto);
+    this.logger.log(`[API] Register device for user: ${req.user.userId}`);
+    return this.biometricService.registerDevice(req.user.userId, dto);
   }
 
   // ================================================
@@ -168,8 +168,8 @@ export class BiometricController {
     },
   })
   async getUserDevices(@Request() req) {
-    this.logger.log(`[API] Get devices for user: ${req.user.sub}`);
-    return this.biometricService.getUserDevices(req.user.sub);
+    this.logger.log(`[API] Get devices for user: ${req.user.userId}`);
+    return this.biometricService.getUserDevices(req.user.userId);
   }
 
   // ================================================
@@ -193,7 +193,7 @@ export class BiometricController {
     },
   })
   async getBiometricStatus(@Request() req) {
-    const devices = await this.biometricService.getUserDevices(req.user.sub);
+    const devices = await this.biometricService.getUserDevices(req.user.userId);
     const activeDevices = devices.filter((d) => d.isActive);
     return {
       biometricEnabled: activeDevices.length > 0,
@@ -221,8 +221,8 @@ export class BiometricController {
     @Param('deviceId') deviceId: string,
     @Body() dto: RevokeDeviceDto,
   ) {
-    this.logger.log(`[API] Revoke device ${deviceId} for user: ${req.user.sub}`);
-    return this.biometricService.revokeDevice(req.user.sub, deviceId, dto.reason);
+    this.logger.log(`[API] Revoke device ${deviceId} for user: ${req.user.userId}`);
+    return this.biometricService.revokeDevice(req.user.userId, deviceId, dto.reason);
   }
 
   // ================================================
@@ -239,7 +239,7 @@ export class BiometricController {
   @ApiResponse({ status: 200, description: 'Device deleted' })
   @ApiResponse({ status: 404, description: 'Device not found' })
   async deleteDevice(@Request() req, @Param('deviceId') deviceId: string) {
-    this.logger.log(`[API] Delete device ${deviceId} for user: ${req.user.sub}`);
-    return this.biometricService.deleteDevice(req.user.sub, deviceId);
+    this.logger.log(`[API] Delete device ${deviceId} for user: ${req.user.userId}`);
+    return this.biometricService.deleteDevice(req.user.userId, deviceId);
   }
 }
