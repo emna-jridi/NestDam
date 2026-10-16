@@ -19,13 +19,19 @@ import {
   ApiParam,
   ApiQuery,
   ApiBody,
+  ApiBearerAuth,
 } from '@nestjs/swagger';
+import { UseGuards } from '@nestjs/common';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AvatarService } from './avatar.service';
 import { CreateAvatarDto } from './dto/create-avatar.dto';
 import { UpdateAvatarDto } from './dto/update-avatar.dto';
 
 @ApiTags('avatar')
-@Controller('api/v1/avatar')
+@ApiBearerAuth()
+// 'api/v1/avatar' is kept so clients still calling /api/api/v1/avatar keep working
+@Controller(['v1/avatar', 'api/v1/avatar'])
+@UseGuards(JwtAuthGuard)
 export class AvatarController {
   constructor(private readonly avatarService: AvatarService) {}
 

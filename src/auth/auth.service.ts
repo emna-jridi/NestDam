@@ -234,12 +234,74 @@ export class AuthService {
   }
 
   // ================================================
+  // GOOGLE LOGIN
+  // ================================================
+  async googleLogin(idToken: string) {
+    try {
+      const { OAuth2Client } = await import('google-auth-library');
+      const client = new OAuth2Client();
+
+      const ticket = await client.verifyIdToken({
+        idToken,
+      });
+
+      const payload = ticket.getPayload();
+      if (!payload || !payload.email) {
+        throw new UnauthorizedException('Invalid Google token payload');
+      }
+
+      let user = await this.usersService.findByEmail(payload.email);
+
+      if (!user) {
+        user = await this.usersService.createGoogleUser({
+          email: payload.email,
+          name: payload.name || 'Google User',
+          avatarUrl: payload.picture,
+          provider: 'google',
+        });
+      }
+
+      if (!user) {
+        throw new UnauthorizedException('Failed to retrieve or create Google user');
+      }
+
+      const tokens = await this.generateTokens(user);
+      const userObj: any = user;
+      const userId = userObj._id ? userObj._id.toString() : (userObj.id ? userObj.id.toString() : userObj);
+      await this.usersService.updateRefreshToken(
+        userId,
+        tokens.refreshToken,
+      );
+
+      return {
+        ...tokens,
+        user: {
+          id: userObj._id || userObj.id,
+          email: userObj.email,
+          name: userObj.name,
+          role: userObj.role,
+          avatarFileName: userObj.avatarFileName,
+          userHash: userObj.userHash,
+          provider: userObj.provider,
+          isVerified: userObj.isVerified,
+        },
+      };
+    } catch (error) {
+      if (error instanceof UnauthorizedException) throw error;
+      throw new UnauthorizedException(
+        `Google authentication failed: ${error.message}`,
+      );
+    }
+  }
+
+  // ================================================
   // JWT GENERATION
   // ================================================
   async generateTokens(user: any) {
+    const userId = user._id ? user._id.toString() : (user.id ? user.id.toString() : user);
     const payload = {
       email: user.email,
-      sub: user._id.toString(),
+      sub: userId,
       role: user.role,
     };
 
@@ -252,3 +314,4 @@ export class AuthService {
     return { accessToken, refreshToken };
   }
 }
+

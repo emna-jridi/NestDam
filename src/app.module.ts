@@ -8,6 +8,7 @@ import { AlertsModule } from './alerts/alerts.module';
 import { ReportModule } from './report/report.module';
 import { DarkWebModule } from './darkweb/darkweb.module';
 import { ScanModule } from './scan/scan.module';
+import { AvatarModule } from './avatar/avatar.module';
 
 @Module({
   imports: [
@@ -24,6 +25,7 @@ import { ScanModule } from './scan/scan.module';
     ReportModule,
     DarkWebModule,
     ScanModule,
+    AvatarModule,
   ],
   controllers: [],
   providers: [],

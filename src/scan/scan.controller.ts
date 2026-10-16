@@ -14,19 +14,14 @@ import {
   Request,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { ApiConsumes, ApiBody, ApiOperation, ApiResponse, ApiProperty } from '@nestjs/swagger';
+import { ApiConsumes, ApiBody, ApiOperation, ApiResponse, ApiProperty, ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { memoryStorage } from 'multer';
 import { ScanService, AppSearchService } from './services';
 import { FastMLScanService } from './services/fast-ml-scan.service';
 import { StartScanDto, ScanLevel, AnalysisType, BatchScanDto } from './dto';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 
-// Mock auth guard - replace with your actual auth
-class AuthGuard {
-  canActivate(context: any) {
-    return true;
-  }
-}
-
+@ApiTags('scan')
 @Controller('scan')
 export class ScanController {
   constructor(
@@ -42,12 +37,13 @@ export class ScanController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Batch scan for multiple apps' })
   @ApiResponse({ status: 200, description: 'Batch scan results' })
-  @UseGuards(AuthGuard)
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
   async batchScan(@Body() dto: BatchScanDto, @Request() req: any): Promise<any> {
-    // Use userId from DTO or fallback to auth context
-    const userId = dto.userHash || req.headers['x-user-id'] || req.user?.id;
+    // Use authenticated userId from JWT payload
+    const userId = req.user?.userId || req.user?.id || req.user?.sub || dto.userHash || req.headers['x-user-id'];
     if (!userId) {
-      throw new BadRequestException('userHash is required in body or as x-user-id header');
+      throw new BadRequestException('userId is required');
     }
     return this.scanService.startBatchScan(dto, userId);
   }
@@ -58,7 +54,8 @@ export class ScanController {
   @Get('apps/search')
   @ApiOperation({ summary: 'Search for apps on Play Store' })
   @ApiResponse({ status: 200, description: 'List of matching apps' })
-  @UseGuards(AuthGuard)
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
   async searchApps(@Query('q') query: string, @Query('limit') limit: string): Promise<any> {
     if (!query) {
       throw new BadRequestException('Search query (q) is required');
@@ -127,7 +124,8 @@ export class ScanController {
       }
     }
   })
-  @UseGuards(AuthGuard)
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
   async startScan(
     @UploadedFile() file: Express.Multer.File,
     @Body() body: any,
@@ -162,10 +160,10 @@ export class ScanController {
       dto.analysisType = file || body.apkUrl ? AnalysisType.APK_UPLOAD : AnalysisType.INSTALLED_APP;
     }
 
-    // Extract userId from request body (sent by Android app) or fall back to auth context
-    const userId = body.userId || req.user?.id;
+    // Extract userId from auth context or request body
+    const userId = req.user?.userId || req.user?.id || req.user?.sub || body.userId;
     if (!userId) {
-      throw new BadRequestException('userId is required in request body or as authenticated user');
+      throw new BadRequestException('userId is required');
     }
 
     return this.scanService.startScan(dto, userId);
@@ -198,7 +196,8 @@ export class ScanController {
       }
     }
   })
-  @UseGuards(AuthGuard)
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
   async getScanResult(@Param('scanId') scanId: string): Promise<any> {
     return this.scanService.getScanResult(scanId);
   }
@@ -209,7 +208,8 @@ export class ScanController {
   @Get(':scanId/progress')
   @ApiOperation({ summary: 'Get scan progress' })
   @ApiResponse({ status: 200, description: 'Current scan progress' })
-  @UseGuards(AuthGuard)
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
   async getScanProgress(@Param('scanId') scanId: string): Promise<any> {
     return this.scanService.getScanProgress(scanId);
   }
@@ -220,7 +220,8 @@ export class ScanController {
   @Get('history/list')
   @ApiOperation({ summary: 'Get user scan history' })
   @ApiResponse({ status: 200, description: 'List of past scans' })
-  @UseGuards(AuthGuard)
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
   async getHistory(
     @Request() req: any,
     @Query('userId') queryUserId: string,
@@ -228,7 +229,7 @@ export class ScanController {
     @Query('skip') skip: string,
   ): Promise<any> {
     // Extract userId from query, headers, or auth context
-    const userId = queryUserId || req.headers['x-user-id'] || req.user?.id;
+    const userId = queryUserId || req.user?.userId || req.user?.id || req.user?.sub || req.headers['x-user-id'];
     if (!userId) {
       throw new BadRequestException('userId is required');
     }
@@ -243,7 +244,8 @@ export class ScanController {
   @Get('latest/:userId')
   @ApiOperation({ summary: 'Get latest scan for a user' })
   @ApiResponse({ status: 200, description: 'Latest scan results' })
-  @UseGuards(AuthGuard)
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
   async getLatest(@Param('userId') userId: string): Promise<any> {
     return this.scanService.getLatestScan(userId);
   }
@@ -254,7 +256,8 @@ export class ScanController {
   @Get('stats/:userId')
   @ApiOperation({ summary: 'Get scan statistics for a user' })
   @ApiResponse({ status: 200, description: 'Scan statistics' })
-  @UseGuards(AuthGuard)
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
   async getStats(@Param('userId') userId: string): Promise<any> {
     return this.scanService.getScanStatistics(userId);
   }
@@ -280,15 +283,16 @@ export class ScanController {
     status: 200,
     description: 'Latest scan result for the specified package',
   })
-  @UseGuards(AuthGuard)
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
   async getAppDetails(
     @Param('packageName') packageName: string,
     @Request() req: any,
   ): Promise<any> {
-    // Extract userId from headers or auth context
-    const userId = req.headers['x-user-id'] || req.user?.id;
+    // Extract userId from auth context or headers
+    const userId = req.user?.userId || req.user?.id || req.user?.sub || req.headers['x-user-id'];
     if (!userId) {
-      throw new BadRequestException('userId is required (send via x-user-id header)');
+      throw new BadRequestException('userId is required (send via x-user-id header or Bearer auth)');
     }
     return this.scanService.getLatestScanByPackage(packageName, userId);
   }
@@ -351,6 +355,8 @@ export class ScanController {
   })
   @ApiResponse({ status: 400, description: 'Invalid APK file' })
   @ApiResponse({ status: 500, description: 'Scan failed' })
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
   async fastScan(
     @UploadedFile() file: Express.Multer.File,
   ): Promise<{

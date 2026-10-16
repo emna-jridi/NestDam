@@ -6,25 +6,49 @@ dotenv.config();
 @Injectable()
 export class MailService {
   private transporter;
-  mailerService: any;
+  private readonly from = process.env.MAIL_FROM || "shadowguardnoreplay@gmail.com";
+  private readonly configured: boolean;
 
   constructor() {
+    const pass = process.env.MAIL_PASS || process.env.SENDGRID_API_KEY;
+    this.configured = !!pass;
+    if (!this.configured) {
+      console.warn("⚠️ MailService: no MAIL_PASS / SENDGRID_API_KEY in .env, emails will not be sent");
+    }
     this.transporter = nodemailer.createTransport({
-      host: "smtp.sendgrid.net",
-      port: 587,
-      secure: false,
+      host: process.env.MAIL_HOST || "smtp.sendgrid.net",
+      port: parseInt(process.env.MAIL_PORT || "587", 10),
+      secure: process.env.MAIL_PORT === "465",
       auth: {
-        user: "apikey",
-        pass: process.env.SENDGRID_API_KEY,
+        user: process.env.MAIL_USER || "apikey",
+        pass,
       },
     });
+  }
+
+  // Without credentials outside production, print the code so the flow can still be tested locally
+  private async deliver(mailOptions: any, label: string, devCode?: string): Promise<boolean> {
+    if (!this.configured) {
+      if (process.env.NODE_ENV !== "production" && devCode) {
+        console.log(`📧 [DEV] ${label} for ${mailOptions.to}: ${devCode}`);
+      }
+      return false;
+    }
+    try {
+      const result = await this.transporter.sendMail(mailOptions);
+      console.log(`✅ ${label} email sent:`, result.messageId);
+      return true;
+    } catch (error) {
+      console.error(`❌ Error sending ${label} email:`, error);
+      return false;
+    }
   }
 
   async sendResetPasswordEmail(email: string, token: string) {
     const resetLink = `https://unschematised-brenna-stalagmitical.ngrok-free.dev/auth/reset-password?token=${token}`;
 
     const mailOptions = {
-      from: 'shadowguardnoreplay@gmail.com',
+      from: this.from,
       to: email,
       subject: 'Réinitialisation de votre mot de passe',
       html: `
@@ -115,18 +139,11 @@ export class MailService {
       `,
     };
 
-    try {
-      const result = await this.transporter.sendMail(mailOptions);
-      console.log("Email sent successfully:", result.messageId);
-      return true;
-    } catch (error) {
-      console.error('Error sending email:', error);
-      return false;
-    }
+    return this.deliver(mailOptions, "Password reset link", resetLink);
   }
 async sendOtpEmail(email: string, name: string, otp: string) {
   const mailOptions = {
-    from: 'shadowguardnoreplay@gmail.com',
+    from: this.from,
     to: email,
     subject: 'Vérification de votre compte - Code OTP 🔐',
     html: `
@@ -162,18 +179,11 @@ async sendOtpEmail(email: string, name: string, otp: string) {
     `,
   };
 
-  try {
-    const result = await this.transporter.sendMail(mailOptions);
-    console.log('✅ OTP email sent:', result.messageId);
-    return true;
-  } catch (error) {
-    console.error('❌ Error sending OTP email:', error);
-    return false;
-  }
+  return this.deliver(mailOptions, "OTP", otp);
 }
 async sendPasswordResetCode(email: string, name: string, code: string) {
   const mailOptions = {
-    from: 'shadowguardnoreplay@gmail.com',
+    from: this.from,
     to: email,
     subject: 'Code de réinitialisation de mot de passe 🔒',
     html: `
@@ -218,19 +228,12 @@ async sendPasswordResetCode(email: string, name: string, code: string) {
     `,
   };
 
-  try {
-    const result = await this.transporter.sendMail(mailOptions);
-    console.log('✅ Password reset code email sent:', result.messageId);
-    return true;
-  } catch (error) {
-    console.error('❌ Error sending password reset code email:', error);
-    return false;
-  }
+  return this.deliver(mailOptions, "Password reset code", code);
 }
 
 async sendPasswordChangeConfirmation(email: string, name: string) {
   const mailOptions = {
-    from: 'shadowguardnoreplay@gmail.com',
+    from: this.from,
     to: email,
     subject: 'Votre mot de passe a été modifié ✅',
     html: `
@@ -284,13 +287,6 @@ async sendPasswordChangeConfirmation(email: string, name: string) {
     `,
   };
 
-  try {
-    const result = await this.transporter.sendMail(mailOptions);
-    console.log('✅ Password change confirmation email sent:', result.messageId);
-    return true;
-  } catch (error) {
-    console.error('❌ Error sending password change confirmation email:', error);
-    return false;
-  }
+  return this.deliver(mailOptions, "Password change confirmation");
 }
 }

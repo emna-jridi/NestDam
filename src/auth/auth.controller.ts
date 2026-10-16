@@ -11,6 +11,7 @@ import { UsersService } from 'src/users/users.service';
 import { VerifyOtpDto } from './dto/verify-otp.dto';
 import { ResendOtpDto } from './dto/resend-otp.dto';
 import { VerifyResetCodeDto } from './dto/verify-reset-code.dto';
+import { GoogleLoginDto } from './dto/google-login.dto';
 @ApiTags('auth')
 @Controller('auth')
 export class AuthController {
@@ -33,12 +34,20 @@ export class AuthController {
 
   }
 
+  @Post('google')
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
+  @ApiOperation({ summary: 'Google Sign-In Authentication' })
+  googleLogin(@Body() googleLoginDto: GoogleLoginDto) {
+    return this.authService.googleLogin(googleLoginDto.idToken);
+  }
+
   @Post('refresh')
   @Throttle({ default: { limit: 10, ttl: 60000 } }) // 10 refreshes per minute
   @ApiOperation({ summary: 'Refresh access token' })
   refresh(@Body() refreshTokenDto: RefreshTokenDto) {
     return this.authService.refreshToken(refreshTokenDto.refreshToken);
   }
+
 
 
 
