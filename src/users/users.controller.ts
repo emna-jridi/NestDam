@@ -43,10 +43,11 @@ async updateProfile(@Req() req, @Body() updateUserDto: UpdateUserDto) {
 
   @Delete(':id')
   @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Delete user ' })
-  remove(@Param('id') id: string) {
-    this.usersService.remove(id);
+  @ApiOperation({ summary: 'Delete user (Admin only)' })
+  async remove(@Param('id') id: string) {
+    await this.usersService.remove(id);
     return { message: 'User deleted' };
   }
   
