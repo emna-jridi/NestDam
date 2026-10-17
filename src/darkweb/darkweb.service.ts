@@ -87,18 +87,30 @@ export class DarkWebMonitoringService {
         }
     }
 
-    // 2. K-Anonymity Password Check (SHA-1 Prefix)
-    async checkPasswordHash(prefix: string): Promise<number> {
-        // Real implementation requires external API access.
-        // Mocking for testing: if prefix starts with "8843D" (SHA1 of 'admin' is d033e22ae348aeb5660fc2140aec35850c4da997 -> d033e)
-        // Let's use a simpler mock. "12345" -> 5 characters.
-        // Example: SHA1('password') = 5baa61e4c9b93f3f0682250b6cf8331b7ee68fd8 -> Prefix 5BAA6 ...
-
-        // Simulate finding it
-        if (prefix.toUpperCase() === '5BAA6') { // Hash of 'password'
-            return 384592;
+    // 2. K-Anonymity Password Check (Pwned Passwords range API)
+    // Returns every leaked hash suffix that starts with the prefix; the app compares its own suffix,
+    // so neither this server nor HIBP ever sees the full hash.
+    async getPwnedPasswordRange(prefix: string): Promise<{ suffix: string; count: number }[]> {
+        const url = `https://api.pwnedpasswords.com/range/${prefix.toUpperCase()}`;
+        try {
+            const response = await firstValueFrom(
+                this.httpService.get<string>(url, {
+                    responseType: 'text',
+                    timeout: 5000,
+                    // Padding adds fake 0-count entries so the response size doesn't leak anything.
+                    headers: { 'Add-Padding': 'true', 'User-Agent': 'ShadowGuard' },
+                }),
+            );
+            return String(response.data)
+                .split('\n')
+                .map((line) => line.trim().split(':'))
+                .filter(([suffix, count]) => suffix && Number(count) > 0)
+                .map(([suffix, count]) => ({ suffix: suffix.toUpperCase(), count: Number(count) }));
+        } catch (error) {
+            // A failed lookup must surface as an error, never as "password is safe".
+            this.logger.error(`Pwned Passwords lookup failed: ${error.message}`);
+            throw new ServiceUnavailableException('Password check service is unavailable, try again later');
         }
-        return 0; // Safe
     }
 
     // 3. Get User Breaches
