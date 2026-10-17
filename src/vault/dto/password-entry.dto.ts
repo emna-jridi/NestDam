@@ -96,18 +96,6 @@ export class UpdatePasswordEntryDto {
 }
 
 /**
- * DTO for analyzing password strength
- * Client sends plaintext password ONLY for analysis (never stored)
- */
-export class AnalyzePasswordDto {
-  @IsString()
-  @IsNotEmpty()
-  @MinLength(1)
-  @MaxLength(128)
-  password: string;
-}
-
-/**
  * Response DTO for password entry (excludes sensitive fields)
  */
 export class PasswordEntryResponseDto {
@@ -129,15 +117,4 @@ export class PasswordEntryResponseDto {
   lastAccessed: Date;
   createdAt: Date;
   updatedAt: Date;
-}
-
-/**
- * DTO for password strength analysis response
- */
-export class PasswordStrengthResponseDto {
-  score: number;
-  level: string;
-  crackTime: string;
-  issues: string[];
-  recommendations: string[];
 }

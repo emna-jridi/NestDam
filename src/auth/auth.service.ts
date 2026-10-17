@@ -133,6 +133,14 @@ export class AuthService {
   }
 
   // ================================================
+  // LOGOUT
+  // ================================================
+  async logout(userId: string) {
+    // Any refresh token issued before this point stops working
+    await this.UserModel.updateOne({ _id: userId }, { $unset: { refreshToken: 1 } });
+  }
+
+  // ================================================
   // PASSWORD RESET + OTP  (inchangé)
   // ================================================
 
@@ -220,11 +228,23 @@ export class AuthService {
     if (user.resetPasswordExpires < new Date())
       throw new BadRequestException('Code expiré');
 
+    // Shares the attempt counter with verifyResetCode so the code can't be brute-forced here
+    user.resetPasswordAttempts = (user.resetPasswordAttempts || 0) + 1;
+    if (user.resetPasswordAttempts > 5) {
+      await user.save();
+      throw new BadRequestException(
+        'Trop de tentatives. Demandez un nouveau code.',
+      );
+    }
+
     const isMatch = await bcrypt.compare(
       dto.code,
       user.resetPasswordCode,
     );
-    if (!isMatch) throw new BadRequestException('Code invalide');
+    if (!isMatch) {
+      await user.save();
+      throw new BadRequestException('Code invalide');
+    }
 
     user.password = await bcrypt.hash(dto.newPassword, 10);
     user.resetPasswordCode = undefined;
@@ -241,10 +261,13 @@ export class AuthService {
   async googleLogin(idToken: string) {
     try {
       const { OAuth2Client } = await import('google-auth-library');
-      const client = new OAuth2Client();
+      const clientId = this.configService.getOrThrow<string>('GOOGLE_CLIENT_ID');
+      const client = new OAuth2Client(clientId);
 
+      // Without an audience, an ID token issued to any Google app would be accepted
       const ticket = await client.verifyIdToken({
         idToken,
+        audience: clientId,
       });
 
       const payload = ticket.getPayload();

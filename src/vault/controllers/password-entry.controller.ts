@@ -19,8 +19,6 @@ import {
   CreatePasswordEntryDto,
   UpdatePasswordEntryDto,
   PasswordEntryResponseDto,
-  AnalyzePasswordDto,
-  PasswordStrengthResponseDto,
 } from '../dto/password-entry.dto';
 
 @Controller('vault/passwords')
@@ -146,42 +144,6 @@ export class PasswordEntryController {
       message: entry.isFavorite ? 'Added to favorites' : 'Removed from favorites',
       entry: this.mapToResponse(entry),
     };
-  }
-
-  /**
-   * POST /vault/passwords/analyze - Analyze password strength
-   * Note: Receives plaintext password ONLY for analysis, never stored
-   */
-  @Post('analyze')
-  @HttpCode(HttpStatus.OK)
-  async analyzeStrength(@Body() dto: AnalyzePasswordDto): Promise<PasswordStrengthResponseDto> {
-    // This is a stateless analysis - no entry ID needed
-    const result = await this.passwordEntryService['strengthService'].analyzePassword(dto.password);
-    const recommendations = await this.passwordEntryService['strengthService'].generateRecommendations(
-      dto.password,
-      result,
-    );
-
-    return {
-      score: result.score,
-      level: result.level,
-      crackTime: result.crackTime,
-      issues: result.issues,
-      recommendations,
-    };
-  }
-
-  /**
-   * POST /vault/passwords/:id/analyze - Analyze and update existing entry
-   */
-  @Post(':id/analyze')
-  async analyzeAndUpdate(
-    @Request() req,
-    @Param('id') id: string,
-    @Body() dto: AnalyzePasswordDto,
-  ): Promise<PasswordStrengthResponseDto> {
-    const result = await this.passwordEntryService.analyzePasswordStrength(id, dto.password);
-    return result;
   }
 
   /**

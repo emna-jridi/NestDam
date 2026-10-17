@@ -1,6 +1,9 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { APP_GUARD } from '@nestjs/core';
+import { ThrottlerModule } from '@nestjs/throttler';
 import { AuthModule } from './auth/auth.module';
+import { CustomThrottlerGuard } from './auth/throttle.guard';
 import { DatabaseModule } from './database/database.module';
 import { UsersModule } from './users/users.module';
 import { VaultModule } from './vault/vault.module';
@@ -17,6 +20,8 @@ import { AvatarModule } from './avatar/avatar.module';
       envFilePath: '.env',
       cache: true,
     }),
+    // Generous app-wide default (scan polling); auth routes set stricter limits with @Throttle
+    ThrottlerModule.forRoot([{ ttl: 60000, limit: 300 }]),
     DatabaseModule,
     UsersModule,
     AuthModule,
@@ -28,6 +33,6 @@ import { AvatarModule } from './avatar/avatar.module';
     AvatarModule,
   ],
   controllers: [],
-  providers: [],
+  providers: [{ provide: APP_GUARD, useClass: CustomThrottlerGuard }],
 })
 export class AppModule { }

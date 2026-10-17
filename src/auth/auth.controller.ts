@@ -1,6 +1,7 @@
-import { Controller, Post, Body } from '@nestjs/common';
+import { Controller, Post, Body, UseGuards, Req, HttpCode, HttpStatus } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
-import { ApiTags, ApiOperation, ApiBody } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiBody, ApiBearerAuth } from '@nestjs/swagger';
+import { JwtAuthGuard } from './jwt-auth.guard';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
@@ -41,6 +42,15 @@ export class AuthController {
     return this.authService.googleLogin(googleLoginDto.idToken);
   }
 
+  @Post('logout')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Revoke the refresh token of the current user' })
+  async logout(@Req() req: any) {
+    await this.authService.logout(req.user.userId);
+  }
+
   @Post('refresh')
   @Throttle({ default: { limit: 10, ttl: 60000 } }) // 10 refreshes per minute
   @ApiOperation({ summary: 'Refresh access token' })
@@ -60,12 +70,14 @@ export class AuthController {
   }
 
   @Post('verify-reset-code')
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
   @ApiOperation({ summary: 'Vérifier le code de réinitialisation' })
   verifyResetCode(@Body() verifyResetCodeDto: VerifyResetCodeDto) {
     return this.authService.verifyResetCode(verifyResetCodeDto);
   }
 
   @Post('reset-password')
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
   @ApiOperation({ summary: 'Réinitialiser le mot de passe' })
   resetPassword(@Body() resetPasswordDto: ResetPasswordDto) {
     return this.authService.resetPassword(resetPasswordDto);
@@ -73,14 +85,17 @@ export class AuthController {
 
   // OTP / email verification
   @Post('verify-email')  // ✅ fixed endpoint
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
   async verifyEmail(@Body() dto: VerifyOtpDto) {
     return this.usersService.verifyOtp(dto); // Reuse verifyOtp logic
   }
   @Post('verify-otp')
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
   async verifyOtp(@Body() dto: VerifyOtpDto) {
     return this.usersService.verifyOtp(dto);
   }
   @Post('resend-otp')
+  @Throttle({ default: { limit: 3, ttl: 60000 } }) // each call sends an email
   @ApiOperation({ summary: 'Renvoyer un code OTP' })
   resendOtp(@Body() resendOtpDto: ResendOtpDto) {
     return this.usersService.resendOtp(resendOtpDto);

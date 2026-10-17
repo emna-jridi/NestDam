@@ -2,7 +2,6 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { PasswordEntry, PasswordEntryDocument } from '../schemas/password-entry.schema';
-import { PasswordStrengthService } from './password-strength.service';
 import { CreatePasswordEntryDto, UpdatePasswordEntryDto } from '../dto/password-entry.dto';
 
 /**
@@ -13,7 +12,6 @@ import { CreatePasswordEntryDto, UpdatePasswordEntryDto } from '../dto/password-
 export class PasswordEntryService {
   constructor(
     @InjectModel(PasswordEntry.name) private passwordEntryModel: Model<PasswordEntryDocument>,
-    private strengthService: PasswordStrengthService,
   ) {}
 
   /**
@@ -152,41 +150,5 @@ export class PasswordEntryService {
       })
       .sort({ isFavorite: -1, createdAt: -1 })
       .exec();
-  }
-
-  /**
-   * Analyze password strength and update entry
-   * Note: This receives the PLAINTEXT password temporarily for analysis only
-   * Never stored in DB
-   */
-  async analyzePasswordStrength(
-    entryId: string,
-    plaintextPassword: string,
-  ): Promise<{
-    score: number;
-    level: string;
-    crackTime: string;
-    issues: string[];
-    recommendations: string[];
-  }> {
-    const analysis = await this.strengthService.analyzePassword(plaintextPassword);
-    const recommendations = await this.strengthService.generateRecommendations(
-      plaintextPassword,
-      analysis,
-    );
-
-    // Update entry with analysis results
-    await this.passwordEntryModel.findByIdAndUpdate(entryId, {
-      strengthScore: analysis.score,
-      strengthLevel: analysis.level,
-      estimatedCrackTime: analysis.crackTime,
-      strengthIssues: analysis.issues,
-      aiRecommendations: recommendations,
-    });
-
-    return {
-      ...analysis,
-      recommendations,
-    };
   }
 }

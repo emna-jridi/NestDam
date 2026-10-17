@@ -14,6 +14,7 @@ import * as crypto from 'crypto';
 import { BiometricDevice, BiometricDeviceDocument } from './entities/biometric-device.schema';
 import { BiometricChallenge, BiometricChallengeDocument } from './entities/biometric-challenge.schema';
 import { User, UserDocument } from '../users/entities/user.entity';
+import { UsersService } from '../users/users.service';
 import {
   RegisterBiometricDeviceDto,
   RequestChallengeDto,
@@ -42,6 +43,7 @@ export class BiometricService {
     private userModel: Model<UserDocument>,
     private jwtService: JwtService,
     private configService: ConfigService,
+    private usersService: UsersService,
   ) {}
 
   // ================================================
@@ -258,6 +260,8 @@ export class BiometricService {
     }
 
     const tokens = await this.generateTokens(user);
+    // /auth/refresh compares against the stored hash, so it must be this token's hash
+    await this.usersService.updateRefreshToken(user._id.toString(), tokens.refreshToken);
 
     this.logger.log(`[VERIFY] ✅ Biometric auth successful for user ${user.email}`);
 

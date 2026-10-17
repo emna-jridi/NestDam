@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
 const gplay = require('google-play-scraper');
 
 export interface AppSearchResult {
@@ -7,6 +7,7 @@ export interface AppSearchResult {
     developer: string;
     category?: string;
     iconUrl: string;
+    rating?: number;
     privacyScore?: number;
     riskLevel: string;
     trackers?: {
@@ -38,11 +39,13 @@ export class AppSearchService {
                 name: app.title,
                 developer: app.developer,
                 iconUrl: app.icon,
+                rating: typeof app.score === 'number' ? app.score : undefined,
                 riskLevel: 'UNKNOWN', // Initial search doesn't have security analysis
             }));
         } catch (error) {
+            // Surface the failure: an empty list would look like "no app found".
             this.logger.error(`App search failed for query "${query}": ${error.message}`);
-            return [];
+            throw new ServiceUnavailableException('App search is unavailable, try again later');
         }
     }
 

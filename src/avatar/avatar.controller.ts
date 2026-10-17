@@ -11,7 +11,11 @@ import {
   Query,
   HttpCode,
   HttpStatus,
+  ForbiddenException,
+  Request,
 } from '@nestjs/common';
+import { InjectModel } from '@nestjs/mongoose';
+import { Model } from 'mongoose';
 import {
   ApiTags,
   ApiOperation,
@@ -26,6 +30,9 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AvatarService } from './avatar.service';
 import { CreateAvatarDto } from './dto/create-avatar.dto';
 import { UpdateAvatarDto } from './dto/update-avatar.dto';
+import { RolesGuard } from '../auth/roles.guard';
+import { Roles } from '../auth/decorator/roles.decorator';
+import { User, UserDocument } from '../users/entities/user.entity';
 
 @ApiTags('avatar')
 @ApiBearerAuth()
@@ -33,7 +40,18 @@ import { UpdateAvatarDto } from './dto/update-avatar.dto';
 @Controller(['v1/avatar', 'api/v1/avatar'])
 @UseGuards(JwtAuthGuard)
 export class AvatarController {
-  constructor(private readonly avatarService: AvatarService) {}
+  constructor(
+    private readonly avatarService: AvatarService,
+    @InjectModel(User.name) private readonly userModel: Model<UserDocument>,
+  ) {}
+
+  /** A userHash from the URL/body may only be changed by the user the JWT belongs to. */
+  private async assertOwnHash(req: any, userHash: string): Promise<void> {
+    const user = await this.userModel.findById(req.user.userId).select('userHash').lean();
+    if (!user?.userHash || user.userHash !== userHash) {
+      throw new ForbiddenException('You can only manage your own avatar');
+    }
+  }
 
   /**
    * Créer un avatar personnalisé
@@ -101,7 +119,8 @@ export class AvatarController {
     status: 400,
     description: 'Données invalides',
   })
-  create(@Body() createAvatarDto: CreateAvatarDto) {
+  async create(@Request() req, @Body() createAvatarDto: CreateAvatarDto) {
+    await this.assertOwnHash(req, createAvatarDto.userHash);
     return this.avatarService.create(createAvatarDto);
   }
 
@@ -185,10 +204,12 @@ export class AvatarController {
     status: 404,
     description: 'Avatar non trouvé',
   })
-  update(
+  async update(
+    @Request() req,
     @Param('userHash') userHash: string,
     @Body() updateAvatarDto: UpdateAvatarDto,
   ) {
+    await this.assertOwnHash(req, userHash);
     return this.avatarService.update(userHash, updateAvatarDto);
   }
 
@@ -214,7 +235,8 @@ export class AvatarController {
     status: 404,
     description: 'Avatar non trouvé',
   })
-  remove(@Param('userHash') userHash: string) {
+  async remove(@Request() req, @Param('userHash') userHash: string) {
+    await this.assertOwnHash(req, userHash);
     return this.avatarService.remove(userHash);
   }
 
@@ -253,7 +275,8 @@ export class AvatarController {
       },
     },
   })
-  generateRandom(@Param('userHash') userHash: string) {
+  async generateRandom(@Request() req, @Param('userHash') userHash: string) {
+    await this.assertOwnHash(req, userHash);
     return this.avatarService.generateRandom(userHash);
   }
 
@@ -292,7 +315,8 @@ export class AvatarController {
       },
     },
   })
-  generateConsistent(@Param('userHash') userHash: string) {
+  async generateConsistent(@Request() req, @Param('userHash') userHash: string) {
+    await this.assertOwnHash(req, userHash);
     return this.avatarService.generateConsistent(userHash);
   }
 
@@ -300,6 +324,8 @@ export class AvatarController {
    * Obtenir tous les avatars (Admin)
    */
   @Get()
+  @UseGuards(RolesGuard)
+  @Roles('admin')
   @ApiOperation({
     summary: 'Lister tous les avatars',
     description: 'Récupère la liste de tous les avatars (pour administration)',
