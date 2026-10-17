@@ -26,20 +26,18 @@ export class VaultService {
   /**
    * Create a new vault for a user
    */
-  async createVault(userId: string, masterPassword: string): Promise<VaultDocument> {
+  async createVault(userId: string, salt: string, authHash: string): Promise<VaultDocument> {
     // Check if vault already exists
     const existing = await this.vaultModel.findOne({ userId: new Types.ObjectId(userId) });
     if (existing) {
       throw new BadRequestException('Vault already exists for this user');
     }
 
-    const masterPasswordHash = await this.cryptoService.hashMasterPassword(masterPassword);
-    const salt = this.cryptoService.generateSalt();
-
     const vault = new this.vaultModel({
       userId: new Types.ObjectId(userId),
-      masterPasswordHash,
+      masterPasswordHash: await this.cryptoService.hashMasterPassword(authHash),
       salt,
+      authVersion: 2,
       lastUnlockedAt: new Date(),
     });
 
@@ -50,7 +48,7 @@ export class VaultService {
    * Unlock vault with master password
    * Implements security rules: max attempts, temporary lock, paranoid wipe
    */
-  async unlockVault(userId: string, masterPassword: string): Promise<{
+  async unlockVault(userId: string, authHash: string, legacyMasterPassword?: string): Promise<{
     success: boolean;
     vault?: VaultDocument;
     salt?: string;
@@ -70,9 +68,13 @@ export class VaultService {
       );
     }
 
-    // Verify password
+    // v1 vaults still hold a hash of the raw master password; v2 only ever sees the auth hash
+    const isLegacy = vault.authVersion !== 2;
+    if (isLegacy && !legacyMasterPassword) {
+      throw new BadRequestException('This vault needs a one-time upgrade: send masterPassword with authHash');
+    }
     const isValid = await this.cryptoService.verifyMasterPassword(
-      masterPassword,
+      isLegacy ? legacyMasterPassword! : authHash,
       vault.masterPasswordHash,
     );
 
@@ -99,6 +101,12 @@ export class VaultService {
         success: false,
         message: `Invalid password. ${this.MAX_UNLOCK_ATTEMPTS - vault.failedUnlockAttempts} attempts remaining`,
       };
+    }
+
+    if (isLegacy) {
+      // Upgrade: from now on the raw master password is never needed (or accepted) again
+      vault.masterPasswordHash = await this.cryptoService.hashMasterPassword(authHash);
+      vault.authVersion = 2;
     }
 
     // Success: reset counters

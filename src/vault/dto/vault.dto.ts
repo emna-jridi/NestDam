@@ -1,22 +1,35 @@
-import { IsString, IsNotEmpty, IsOptional, IsBoolean, IsNumber, MinLength, MaxLength } from 'class-validator';
+import { IsString, IsNotEmpty, IsOptional, IsBoolean, IsNumber, MaxLength } from 'class-validator';
 
 /**
- * DTO for creating a new vault
+ * DTO for creating a new vault.
+ * The client generates the salt, derives the vault key from the master password, and sends
+ * only a one-way auth hash of that key: the master password never reaches the server.
  */
 export class CreateVaultDto {
   @IsString()
   @IsNotEmpty()
-  @MinLength(8, { message: 'Master password must be at least 8 characters' })
-  masterPassword: string;
+  @MaxLength(128)
+  salt: string;
+
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(128)
+  authHash: string;
 }
 
 /**
- * DTO for unlocking vault
+ * DTO for unlocking vault.
+ * masterPassword is only accepted once, to upgrade a legacy (v1) vault to auth hashes.
  */
 export class UnlockVaultDto {
   @IsString()
   @IsNotEmpty()
-  masterPassword: string;
+  @MaxLength(128)
+  authHash: string;
+
+  @IsOptional()
+  @IsString()
+  masterPassword?: string;
 }
 
 /**

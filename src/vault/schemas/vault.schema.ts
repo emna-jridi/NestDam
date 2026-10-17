@@ -9,10 +9,15 @@ export class Vault {
   userId: Types.ObjectId;
 
   @Prop({ required: true })
-  masterPasswordHash: string; // Argon2id hash - NEVER plaintext
+  masterPasswordHash: string; // Argon2id hash of the client's auth hash (v2) or legacy master password (v1)
 
   @Prop({ required: true })
   salt: string; // Salt for key derivation (client-side)
+
+  // 1 = server received the raw master password (legacy), 2 = server only sees a one-way auth hash.
+  // v1 vaults upgrade to v2 on their next successful unlock.
+  @Prop({ default: 1 })
+  authVersion: number;
 
   @Prop({ default: 0 })
   failedUnlockAttempts: number;

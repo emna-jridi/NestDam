@@ -39,7 +39,7 @@ export class VaultController {
   @HttpCode(HttpStatus.CREATED)
   async createVault(@Request() req, @Body() dto: CreateVaultDto) {
     const userId = req.user.userId || req.user.sub;
-    const vault = await this.vaultService.createVault(userId, dto.masterPassword);
+    const vault = await this.vaultService.createVault(userId, dto.salt, dto.authHash);
 
     return {
       message: 'Vault created successfully',
@@ -58,7 +58,7 @@ export class VaultController {
     @Body() dto: UnlockVaultDto,
   ): Promise<VaultUnlockResponseDto> {
     const userId = req.user.userId || req.user.sub;
-    const result = await this.vaultService.unlockVault(userId, dto.masterPassword);
+    const result = await this.vaultService.unlockVault(userId, dto.authHash, dto.masterPassword);
 
     return {
       success: result.success,
@@ -78,6 +78,9 @@ export class VaultController {
 
     return {
       vaultId: vault.id,
+      // Not secret: the client needs it before unlock to derive the key and the auth hash
+      salt: vault.salt,
+      authVersion: vault.authVersion,
       autoLockTimeout: vault.autoLockTimeout,
       paranoidMode: vault.paranoidMode,
       twoFactorEnabled: vault.twoFactorEnabled,
