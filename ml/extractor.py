@@ -16,6 +16,7 @@ Output: {"tokens": [...], "numeric": {...}}
     numeric -> counts / sizes
 """
 
+import io
 import zipfile
 
 from loguru import logger
@@ -28,6 +29,17 @@ ANDROID_NS = "{http://schemas.android.com/apk/res/android}"
 
 # Only keep framework classes, not the app's own code (too app-specific to generalize)
 FRAMEWORK_PREFIXES = ("Landroid/", "Ljava/", "Ljavax/", "Ldalvik/", "Lorg/apache/http/")
+# Libraries bundled inside the APK under an android/ name: they reveal the app's age, not its behavior
+BUNDLED_PREFIXES = ("Landroid/support/", "Landroid/arch/")
+
+
+def is_framework_class(cls: str) -> bool:
+    return cls.startswith(FRAMEWORK_PREFIXES) and not cls.startswith(BUNDLED_PREFIXES)
+
+
+def keep_token(token: str) -> bool:
+    """Training filters stored tokens with this, so old features.jsonl files follow the current rules."""
+    return not token.startswith("api::") or is_framework_class(token[5:])
 
 SUSPICIOUS_APIS = {
     ("Landroid/telephony/SmsManager;", "sendTextMessage"),
@@ -100,7 +112,7 @@ def _code_tokens(dex_blobs) -> tuple[set[str], int]:
             if not ref:
                 continue
             cls, name = ref[0], ref[1]
-            if cls.startswith(FRAMEWORK_PREFIXES):
+            if is_framework_class(cls):
                 tokens.add(f"api::{cls}")
             if (cls, name) in SUSPICIOUS_APIS:
                 tokens.add(f"sapi::{cls}->{name}")
@@ -114,23 +126,28 @@ def _to_int(value) -> int:
         return 0
 
 
-def _raw_dex_blobs(apk_path: str):
+def _open_zip(apk: str | bytes) -> zipfile.ZipFile:
+    return zipfile.ZipFile(io.BytesIO(apk) if isinstance(apk, bytes) else apk)
+
+
+def _raw_dex_blobs(apk: str | bytes):
     """Read classes*.dex straight from the zip (used when the manifest can't be parsed)."""
-    with zipfile.ZipFile(apk_path) as zf:
+    with _open_zip(apk) as zf:
         for info in zf.infolist():
             if info.filename.startswith("classes") and info.filename.endswith(".dex"):
                 info.flag_bits &= ~0x1  # fake "encrypted" flag: Android ignores it, so do we
                 yield zf.read(info)
 
 
-def extract_features(apk_path: str) -> dict:
-    with zipfile.ZipFile(apk_path) as zf:
+def extract_features(apk_file: str | bytes) -> dict:
+    """apk_file: a path, or the APK bytes (in-memory: malware never touches the disk)."""
+    with _open_zip(apk_file) as zf:
         names = zf.namelist()
         fake_encryption = any(info.flag_bits & 0x1 for info in zf.infolist())
     native_libs = sum(1 for n in names if n.startswith("lib/") and n.endswith(".so"))
 
     try:
-        apk = APK(apk_path)
+        apk = APK(apk_file, raw=isinstance(apk_file, bytes))
     except Exception:
         # Malware often corrupts AndroidManifest.xml on purpose: Android still installs it,
         # but parsers crash. Keep the code features and flag the trick itself.
@@ -144,7 +161,7 @@ def extract_features(apk_path: str) -> dict:
     else:
         tokens = {"meta::manifest_unparsable"}
         counts = {"activities": 0, "services": 0, "receivers": 0, "providers": 0}
-        code_tokens, num_dex = _code_tokens(_raw_dex_blobs(apk_path))
+        code_tokens, num_dex = _code_tokens(_raw_dex_blobs(apk_file))
         permissions, min_sdk, target_sdk = [], 0, 0
     tokens |= code_tokens
     if fake_encryption:
