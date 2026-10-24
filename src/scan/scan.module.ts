@@ -11,15 +11,12 @@ import {
 import {
   ScanService,
   APKFileHandlerService,
-  FeatureExtractionService,
-  MLMalwareDetectorService,
   TrackerDetectionService,
   SAATAnalysisService,
   ScoringService,
   RecommendationsService,
   CacheService,
   ProgressTrackingService,
-  N8NOrchestrationService,
   GeminiMLService,
   AppSearchService,
 } from './services';
@@ -38,8 +35,6 @@ import { ScanController } from './scan.controller';
   providers: [
     ScanService,
     APKFileHandlerService,
-    FeatureExtractionService,
-    MLMalwareDetectorService,
     GeminiMLService,
     TrackerDetectionService,
     SAATAnalysisService,
@@ -47,7 +42,6 @@ import { ScanController } from './scan.controller';
     RecommendationsService,
     CacheService,
     ProgressTrackingService,
-    N8NOrchestrationService,
     FastMLScanService,
     AppSearchService,
   ],

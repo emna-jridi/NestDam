@@ -190,14 +190,6 @@ export class ScanUtils {
   }
 
   /**
-   * Normalize feature value to 0-1 range
-   */
-  static normalizeFeature(value: number, max: number): number {
-    const normalized = Math.min(value / max, 1);
-    return Math.round(normalized * 1000) / 1000; // Round to 3 decimals
-  }
-
-  /**
    * Create temporary directory for APK processing
    */
   static createTempDirectory(base: string = '/tmp/shadowguard'): string {

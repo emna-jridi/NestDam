@@ -6,8 +6,6 @@ export const SCAN_ERRORS = {
   SCAN_005: 'APK file is corrupt or invalid.',
   SCAN_006: 'ML inference timeout exceeded (5 seconds).',
   SCAN_007: 'Tracker detection API error - falling back to local database.',
-  SCAN_008: 'Feature extraction incomplete - using default values.',
-  SCAN_009: 'N8N orchestration failed - maximum retries exceeded.',
   SCAN_010: 'Internal server error during scan processing.',
 };
 
@@ -19,8 +17,6 @@ export const SCAN_ERROR_CODES = {
   CORRUPT_APK: 'SCAN_005',
   ML_TIMEOUT: 'SCAN_006',
   TRACKER_API_ERROR: 'SCAN_007',
-  FEATURE_EXTRACTION_INCOMPLETE: 'SCAN_008',
-  N8N_ORCHESTRATION_FAILED: 'SCAN_009',
   INTERNAL_ERROR: 'SCAN_010',
 };
 
@@ -42,15 +38,6 @@ export const DANGEROUS_PERMISSIONS = [
   'android.permission.WRITE_EXTERNAL_STORAGE',
 ];
 
-export const PERMISSION_CATEGORIES = {
-  INTERNET: ['android.permission.INTERNET', 'android.permission.ACCESS_NETWORK_STATE'],
-  SMS: ['android.permission.READ_SMS', 'android.permission.SEND_SMS', 'android.permission.RECEIVE_SMS'],
-  LOCATION: ['android.permission.ACCESS_FINE_LOCATION', 'android.permission.ACCESS_COARSE_LOCATION'],
-  CAMERA: ['android.permission.CAMERA'],
-  CONTACTS: ['android.permission.READ_CONTACTS', 'android.permission.WRITE_CONTACTS'],
-  STORAGE: ['android.permission.READ_EXTERNAL_STORAGE', 'android.permission.WRITE_EXTERNAL_STORAGE'],
-};
-
 export const SCAN_PROGRESS_STEPS = [
   'extracting_apk',
   'parsing_manifest',
@@ -69,11 +56,4 @@ export const STEP_WEIGHTS = {
   tracker_detection: 0.15,
   saat_analysis: 0.2,
   finalizing: 0.15,
-};
-
-export const FEATURE_NORMALIZATION_RANGES = {
-  permissions_count: 50,
-  dangerous_permissions_count: 20,
-  min_sdk_version: 35,
-  app_size_mb: 200,
 };

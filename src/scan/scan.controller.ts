@@ -235,18 +235,6 @@ export class ScanController {
   }
 
   /**
-   * Webhook callback for N8N deep scan results
-   */
-  @Post('callback')
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'N8N deep scan callback' })
-  async handleCallback(@Body() callbackData: any): Promise<{ status: string }> {
-    // This would integrate with N8N orchestration service
-    // For now, just acknowledge
-    return { status: 'received' };
-  }
-
-  /**
    * Get app details by package name (latest scan)
    */
   @Get('app/:packageName')

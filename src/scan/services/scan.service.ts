@@ -24,7 +24,6 @@ import {
 } from '../utils';
 import { APKFileHandlerService } from './apk-file-handler.service';
 import { FastMLScanService, FastScanResult } from './fast-ml-scan.service';
-import { MLMalwareDetectorService } from './ml-malware-detector.service';
 import { TrackerDetectionService } from './tracker-detection.service';
 import { SAATAnalysisService } from './saat-analysis.service';
 import { ScoringService } from './scoring.service';
@@ -47,7 +46,6 @@ export class ScanService {
     @InjectModel(ScanProgress.name) private progressModel: Model<ScanProgress>,
     private apkHandler: APKFileHandlerService,
     private mlScanner: FastMLScanService,
-    private mlDetector: MLMalwareDetectorService,
     private geminiML: GeminiMLService,
     private trackerDetector: TrackerDetectionService,
     private saatAnalyzer: SAATAnalysisService,
@@ -799,21 +797,8 @@ export class ScanService {
   /**
    * Get ML model information
    */
-  getMLModelInfo(): any {
-    const modelInfo = this.mlDetector.getModelInfo();
-    const memoryInfo = this.mlDetector.getMemoryInfo();
-
-    return {
-      ...modelInfo,
-      memory: memoryInfo,
-      featureAlignment: {
-        status: 'ALIGNED',
-        lastUpdated: '2026-01-01',
-        trainingFeatures: modelInfo.features,
-        featureCount: modelInfo.features.length,
-        note: 'Features aligned with training model as of Jan 1, 2026'
-      }
-    };
+  getMLModelInfo(): Record<string, any> {
+    return this.mlScanner.getModelInfo();
   }
 
   /**

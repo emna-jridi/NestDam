@@ -70,24 +70,6 @@ export class TrackerApiErrorException extends InternalServerErrorException {
   }
 }
 
-export class FeatureExtractionIncompleteException extends InternalServerErrorException {
-  constructor() {
-    super({
-      error: SCAN_ERROR_CODES.FEATURE_EXTRACTION_INCOMPLETE,
-      message: SCAN_ERRORS.SCAN_008,
-    });
-  }
-}
-
-export class N8NOrchestrationFailedException extends InternalServerErrorException {
-  constructor() {
-    super({
-      error: SCAN_ERROR_CODES.N8N_ORCHESTRATION_FAILED,
-      message: SCAN_ERRORS.SCAN_009,
-    });
-  }
-}
-
 export class ScanInternalErrorException extends InternalServerErrorException {
   constructor(detail?: string) {
     super({
