@@ -19,9 +19,10 @@ from datetime import datetime
 
 import lightgbm as lgb
 import numpy as np
-from scipy import sparse
 from sklearn.metrics import confusion_matrix, f1_score, precision_score, recall_score, roc_auc_score
 from sklearn.model_selection import train_test_split
+
+from extractor import to_matrix
 
 ML_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(ML_DIR, "data")
@@ -71,21 +72,6 @@ def build_columns(rows: list[dict]) -> tuple[list[str], list[str]]:
     tokens = sorted(t for t, n in df.items() if n >= MIN_DF and not t.startswith(AGE_TOKEN_PREFIXES))
     numeric = sorted(set(rows[0]["numeric"]) - AGE_NUMERIC)
     return tokens, numeric
-
-
-def to_matrix(rows: list[dict], tokens: list[str], numeric: list[str]) -> sparse.csr_matrix:
-    index = {t: i for i, t in enumerate(tokens)}
-    n_tok = len(tokens)
-    indptr, indices, values = [0], [], []
-    for r in rows:
-        cols = sorted({index[t] for t in r["tokens"] if t in index})
-        indices.extend(cols)
-        values.extend([1.0] * len(cols))
-        for j, name in enumerate(numeric):
-            indices.append(n_tok + j)
-            values.append(float(r["numeric"].get(name) or 0))
-        indptr.append(len(indices))
-    return sparse.csr_matrix((values, indices, indptr), shape=(len(rows), n_tok + len(numeric)), dtype=np.float32)
 
 
 def labels(rows: list[dict]) -> np.ndarray:

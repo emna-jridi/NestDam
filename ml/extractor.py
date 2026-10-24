@@ -19,7 +19,9 @@ Output: {"tokens": [...], "numeric": {...}}
 import io
 import zipfile
 
+import numpy as np
 from loguru import logger
+from scipy import sparse
 from androguard.core.apk import APK
 from androguard.core.dex import DEX
 
@@ -177,3 +179,19 @@ def extract_features(apk_file: str | bytes) -> dict:
         "num_files": len(names),
     }
     return {"tokens": sorted(tokens), "numeric": numeric}
+
+
+def to_matrix(rows: list[dict], tokens: list[str], numeric: list[str]) -> sparse.csr_matrix:
+    """Feature dicts -> model input (columns: tokens as 0/1, then numeric). Shared by training and scan."""
+    index = {t: i for i, t in enumerate(tokens)}
+    n_tok = len(tokens)
+    indptr, indices, values = [0], [], []
+    for r in rows:
+        cols = sorted({index[t] for t in r["tokens"] if t in index})
+        indices.extend(cols)
+        values.extend([1.0] * len(cols))
+        for j, name in enumerate(numeric):
+            indices.append(n_tok + j)
+            values.append(float(r["numeric"].get(name) or 0))
+        indptr.append(len(indices))
+    return sparse.csr_matrix((values, indices, indptr), shape=(len(rows), n_tok + len(numeric)), dtype=np.float32)

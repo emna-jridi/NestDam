@@ -22,6 +22,8 @@ export class FastMLScanService {
     'ml',
     'fast_scan.py',
   );
+  // Python with the ml/requirements.txt packages (e.g. full path to python.exe on Windows)
+  private readonly pythonBin = process.env.PYTHON_BIN || 'python';
 
   async scanApk(apkPath: string): Promise<FastScanResult> {
     // Validate APK path exists
@@ -37,11 +39,11 @@ export class FastMLScanService {
       this.logger.debug(`Starting FAST scan for: ${apkPath}`);
 
       // Execute Python script
-      const { stdout, stderr } = await execFileAsync('python', [
+      const { stdout, stderr } = await execFileAsync(this.pythonBin, [
         this.pythonScriptPath,
         apkPath,
       ], {
-        timeout: 30000, // 30 second timeout
+        timeout: 60000, // 60 second timeout (full dex parsing)
         maxBuffer: 10 * 1024 * 1024, // 10MB buffer
       });
 
