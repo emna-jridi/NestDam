@@ -16,7 +16,7 @@ export interface MLAnalysisDto {
     trackersAnalysis: string;
     behaviorAnalysis: string;
   };
-  analysisSource: 'tensorflow' | 'gemini' | 'hybrid';
+  analysisSource: 'tensorflow' | 'gemini' | 'hybrid' | 'lightgbm' | 'lightgbm+gemini';
 }
 
 export class ScanResultDto {

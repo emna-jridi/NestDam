@@ -264,6 +264,19 @@ export class ScanService {
         permissions,
       });
 
+      // LightGBM decides, Gemini only explains
+      const mlAnalysis = await this.geminiML.explainScan({
+        packageName,
+        appName,
+        verdict: lgbm.verdict,
+        malwareProbability: mlResult.malwareProbability,
+        riskLevel: mlResult.riskLevel,
+        topFeatures: mlResult.topContributingFeatures,
+        permissions,
+        trackers: (trackerResult?.trackers || []).filter((t) => t.found),
+        signatureValid,
+      });
+
       // Update final scan record
       await this.scanModel.updateOne(
         { scanId },
@@ -276,6 +289,7 @@ export class ScanService {
           confidenceScore,
           analysisType,
           ml: mlResult,
+          mlAnalysis,
           trackers: trackerResult,
           saat: saatResult,
           permissions,
@@ -585,6 +599,7 @@ export class ScanService {
       overallScore: scan.overallScore,
       confidenceScore: scan.confidenceScore,
       ml: scan.ml,
+      mlAnalysis: scan.mlAnalysis,
       trackers: scan.trackers,
       saat: scan.saat,
       startTime: scan.startTime,

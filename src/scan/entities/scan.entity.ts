@@ -46,6 +46,9 @@ export class Scan extends Document {
   ml: Record<string, any>;
 
   @Prop({ type: Object })
+  mlAnalysis: Record<string, any>;
+
+  @Prop({ type: Object })
   trackers: Record<string, any>;
 
   @Prop({ type: Object })

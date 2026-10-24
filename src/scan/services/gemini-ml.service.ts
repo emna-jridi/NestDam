@@ -35,11 +35,31 @@ export interface AppAnalysisInput {
   targetSdkVersion?: number;
 }
 
+/** Scan facts handed to Gemini: the verdict is LightGBM's and is never changed here */
+export interface ScanExplanationInput {
+  packageName: string;
+  appName?: string;
+  verdict: 'malicious' | 'benign';
+  malwareProbability: number;
+  riskLevel: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
+  topFeatures: { name: string; impact: number }[];
+  permissions: string[];
+  trackers: { name: string; category: string }[];
+  signatureValid: boolean;
+}
+
+export type ScanExplanation = Pick<
+  GeminiAnalysisResult,
+  'explanation' | 'recommendations' | 'riskFactors' | 'safetyTips' | 'analysisDetails'
+> & { analysisSource: 'lightgbm+gemini' | 'lightgbm' };
+
 @Injectable()
 export class GeminiMLService {
   private readonly logger = new Logger(GeminiMLService.name);
   private readonly API_KEY = process.env.GEMINI_API_KEY;
-  private readonly API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent';
+  // An alias by default: pinned versions (e.g. gemini-1.5-flash) get retired and then 404
+  private readonly MODEL = process.env.GEMINI_MODEL || 'gemini-flash-latest';
+  private readonly API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${this.MODEL}:generateContent`;
   private readonly TIMEOUT = 30000; // 30 seconds
 
   /**
@@ -59,6 +79,127 @@ export class GeminiMLService {
       this.logger.error(`Gemini analysis failed: ${error.message}`);
       return this.getFallbackAnalysis(input);
     }
+  }
+
+  /**
+   * Explain a LightGBM verdict in plain French (Gemini writes text only, never the verdict)
+   */
+  async explainScan(input: ScanExplanationInput): Promise<ScanExplanation> {
+    if (this.API_KEY) {
+      try {
+        const response = await this.callGeminiAPI(this.buildExplanationPrompt(input));
+        const parsed = JSON.parse(this.stripCodeFence(response));
+        return {
+          explanation: parsed.explanation || this.fallbackScanExplanation(input),
+          recommendations: Array.isArray(parsed.recommendations) ? parsed.recommendations : [],
+          riskFactors: Array.isArray(parsed.riskFactors) ? parsed.riskFactors : [],
+          safetyTips: Array.isArray(parsed.safetyTips) ? parsed.safetyTips : [],
+          analysisDetails: {
+            permissionsAnalysis: parsed.analysisDetails?.permissionsAnalysis || '',
+            trackersAnalysis: parsed.analysisDetails?.trackersAnalysis || '',
+            behaviorAnalysis: parsed.analysisDetails?.behaviorAnalysis || '',
+          },
+          analysisSource: 'lightgbm+gemini',
+        };
+      } catch (error) {
+        this.logger.error(`Gemini explanation failed: ${error.message}`);
+      }
+    }
+
+    // No Gemini: same facts, template text
+    const appInput = this.toAppInput(input);
+    const dangerousPerms = this.getDangerousPermissions(input.permissions);
+    return {
+      explanation: this.fallbackScanExplanation(input),
+      recommendations: this.generateRecommendations(appInput, input.verdict === 'malicious' ? 1 : 0, dangerousPerms),
+      riskFactors: [
+        ...input.topFeatures.slice(0, 3).map((f) => `Signal du modèle : ${this.featureLabel(f.name)}`),
+        ...this.generateRiskFactors(appInput, dangerousPerms, input.trackers.length).filter((f) => !f.startsWith('Aucun')),
+      ],
+      safetyTips: this.generateSafetyTips(input.riskLevel),
+      analysisDetails: {
+        permissionsAnalysis: `${dangerousPerms.length} permissions dangereuses détectées sur ${input.permissions.length} au total.`,
+        trackersAnalysis: `${input.trackers.length} trackers détectés.`,
+        behaviorAnalysis: `Score du modèle : ${Math.round(input.malwareProbability * 100)} %.`,
+      },
+      analysisSource: 'lightgbm',
+    };
+  }
+
+  private buildExplanationPrompt(input: ScanExplanationInput): string {
+    const signals = input.topFeatures.map((f) => `- ${this.featureLabel(f.name)}`).join('\n') || '- Aucun signal marquant';
+    const trackerList = input.trackers.map((t) => `${t.name} (${t.category})`).join(', ') || 'Aucun détecté';
+
+    return `Tu es un expert en cybersécurité mobile Android. Un modèle de détection de malware (LightGBM, entraîné sur des milliers d'APK) a déjà analysé cette application. Ton rôle est d'EXPLIQUER son résultat à un utilisateur non technique, en français.
+
+## Résultat du modèle (ne le remets pas en cause, ne le modifie pas):
+- **Verdict**: ${input.verdict === 'malicious' ? 'malveillante' : 'saine'}
+- **Score**: ${Math.round(input.malwareProbability * 100)} %
+- **Niveau de risque**: ${input.riskLevel}
+
+## Signaux qui ont le plus poussé le modèle vers "malware":
+${signals}
+
+## Application:
+- **Package**: ${input.packageName}
+- **Nom**: ${input.appName || 'Inconnu'}
+- **Signature valide**: ${input.signatureValid ? 'Oui' : 'Non'}
+- **Permissions (${input.permissions.length})**: ${input.permissions.join(', ') || 'Aucune'}
+- **Trackers (${input.trackers.length})**: ${trackerList}
+
+## Instructions:
+Réponds UNIQUEMENT avec un JSON valide (sans markdown, sans backticks) suivant ce format exact:
+
+{
+  "explanation": "2-3 phrases claires qui expliquent le verdict du modèle",
+  "recommendations": ["Action concrète 1", "Action concrète 2"],
+  "riskFactors": ["Facteur de risque 1", "Facteur de risque 2"],
+  "safetyTips": ["Conseil 1", "Conseil 2"],
+  "analysisDetails": {
+    "permissionsAnalysis": "Analyse des permissions",
+    "trackersAnalysis": "Analyse des trackers",
+    "behaviorAnalysis": "Comportement probable, d'après les signaux du modèle"
+  }
+}`;
+  }
+
+  private fallbackScanExplanation(input: ScanExplanationInput): string {
+    const name = input.appName || input.packageName;
+    const score = Math.round(input.malwareProbability * 100);
+    const signals = input.topFeatures.slice(0, 3).map((f) => this.featureLabel(f.name)).join(', ');
+    if (input.verdict === 'malicious') {
+      return `Le modèle classe ${name} comme probablement malveillante (score ${score} %). Signaux principaux : ${signals}.`;
+    }
+    return `Le modèle ne détecte pas de comportement malveillant dans ${name} (score ${score} %).`;
+  }
+
+  /** perm::android.permission.READ_SMS -> permission READ_SMS, sapi::Lx/SmsManager;->send -> SmsManager.send */
+  private featureLabel(name: string): string {
+    const [family, value = ''] = name.includes('::') ? name.split('::') : ['', name];
+    const shortClass = (cls: string) => cls.replace(/;$/, '').split('/').pop();
+    switch (family) {
+      case 'perm': return `permission ${value.split('.').pop()}`;
+      case 'sapi': {
+        const [cls, method] = value.split(';->');
+        return `appel ${shortClass(cls)}.${method}`;
+      }
+      case 'api': return `utilise ${shortClass(value)}`;
+      case 'intent': return `écoute ${value.split('.').pop()}`;
+      case 'feat': return `matériel ${value.split('.').pop()}`;
+      case 'meta': return value === 'zip_fake_encryption' ? 'faux chiffrement du zip (anti-analyse)' : 'manifeste corrompu (anti-analyse)';
+      default: return value;
+    }
+  }
+
+  private toAppInput(input: ScanExplanationInput): AppAnalysisInput {
+    return {
+      packageName: input.packageName,
+      appName: input.appName,
+      permissions: input.permissions,
+      trackers: input.trackers,
+      isSystemApp: false,
+      signatureValid: input.signatureValid,
+    };
   }
 
   /**
@@ -126,8 +267,6 @@ Critères d'évaluation:
    * Call Gemini API
    */
   private async callGeminiAPI(prompt: string): Promise<string> {
-    const url = `${this.API_URL}?key=${this.API_KEY}`;
-
     const requestBody = {
       contents: [
         {
@@ -154,10 +293,11 @@ Critères d'évaluation:
 
     this.logger.debug(`Calling Gemini API for analysis...`);
 
-    const response = await axios.post(url, requestBody, {
+    const response = await axios.post(this.API_URL, requestBody, {
       timeout: this.TIMEOUT,
       headers: {
         'Content-Type': 'application/json',
+        'x-goog-api-key': this.API_KEY, // header, not query string: keeps the key out of URLs and error logs
       },
     });
 
@@ -175,20 +315,7 @@ Critères d'évaluation:
    */
   private parseGeminiResponse(response: string, input: AppAnalysisInput): GeminiAnalysisResult {
     try {
-      // Clean response (remove markdown code blocks if present)
-      let cleanJson = response.trim();
-      if (cleanJson.startsWith('```json')) {
-        cleanJson = cleanJson.slice(7);
-      }
-      if (cleanJson.startsWith('```')) {
-        cleanJson = cleanJson.slice(3);
-      }
-      if (cleanJson.endsWith('```')) {
-        cleanJson = cleanJson.slice(0, -3);
-      }
-      cleanJson = cleanJson.trim();
-
-      const parsed = JSON.parse(cleanJson);
+      const parsed = JSON.parse(this.stripCodeFence(response));
 
       return {
         malwareProbability: this.clamp(parsed.malwareProbability || 0.1, 0, 1),
@@ -209,6 +336,23 @@ Critères d'évaluation:
       this.logger.warn(`Failed to parse Gemini response: ${error.message}`);
       return this.getFallbackAnalysis(input);
     }
+  }
+
+  /**
+   * Remove markdown code fences Gemini sometimes adds around JSON
+   */
+  private stripCodeFence(response: string): string {
+    let cleanJson = response.trim();
+    if (cleanJson.startsWith('```json')) {
+      cleanJson = cleanJson.slice(7);
+    }
+    if (cleanJson.startsWith('```')) {
+      cleanJson = cleanJson.slice(3);
+    }
+    if (cleanJson.endsWith('```')) {
+      cleanJson = cleanJson.slice(0, -3);
+    }
+    return cleanJson.trim();
   }
 
   /**
