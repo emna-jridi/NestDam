@@ -8,25 +8,21 @@ import { ScanUtils } from '../utils';
 @Injectable()
 export class CacheService {
   private readonly logger = new Logger(CacheService.name);
-  private readonly TTL_MAP = {
-    SMART: 3 * 24 * 60 * 60, // 3 days
-    DEEP: 1 * 24 * 60 * 60, // 1 day
-  };
+  private readonly TTL = 3 * 24 * 60 * 60; // 3 days
 
   constructor(
     @InjectModel(ScanCache.name) private cacheModel: Model<ScanCache>,
   ) {}
 
   /**
-   * Get cache key from packageName, versionCode, level
+   * Get cache key from packageName, versionCode, analysisType
    */
   private getCacheKey(
     packageName: string,
     versionCode: string,
-    level: string,
     analysisType: string,
   ): string {
-    return ScanUtils.calculateCacheKey(packageName, versionCode, level, analysisType);
+    return ScanUtils.calculateCacheKey(packageName, versionCode, analysisType);
   }
 
   /**
@@ -35,16 +31,15 @@ export class CacheService {
   async getFromCache(
     packageName: string,
     versionCode: string,
-    level: string,
     analysisType: string,
   ): Promise<any | null> {
-    const cacheKey = this.getCacheKey(packageName, versionCode, level, analysisType);
+    const cacheKey = this.getCacheKey(packageName, versionCode, analysisType);
 
     try {
       const cached = await this.cacheModel.findOne({ cacheKey }).lean();
 
       if (cached && !cached.isStale) {
-        this.logger.debug(`Cache hit for ${packageName}:${versionCode}:${level}`);
+        this.logger.debug(`Cache hit for ${packageName}:${versionCode}`);
         return cached.scanResult;
       }
 
@@ -67,15 +62,14 @@ export class CacheService {
     scanId: string,
     packageName: string,
     versionCode: string,
-    level: string,
     analysisType: string,
   ): Promise<void> {
-    const cacheKey = this.getCacheKey(packageName, versionCode, level, analysisType);
+    const cacheKey = this.getCacheKey(packageName, versionCode, analysisType);
 
     try {
       // Get scan result from database
       // This would be done in the caller, but for now we'll just create a cache entry
-      const ttl = this.TTL_MAP[level] || this.TTL_MAP.SMART;
+      const ttl = this.TTL;
       const expiresAt = new Date(Date.now() + ttl * 1000);
 
       await this.cacheModel.updateOne(
@@ -84,7 +78,6 @@ export class CacheService {
           cacheKey,
           packageName,
           versionCode,
-          level,
           analysisType,
           scanResult: { scanId }, // Placeholder - would be full result
           createdAt: new Date(),
@@ -94,7 +87,7 @@ export class CacheService {
         { upsert: true },
       );
 
-      this.logger.debug(`Cached scan for ${packageName}:${versionCode}:${level} (TTL: ${ttl}s)`);
+      this.logger.debug(`Cached scan for ${packageName}:${versionCode} (TTL: ${ttl}s)`);
     } catch (error) {
       this.logger.error(`Failed to cache result: ${error.message}`);
     }

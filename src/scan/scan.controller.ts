@@ -17,7 +17,7 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiConsumes, ApiBody, ApiOperation, ApiResponse, ApiProperty, ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { memoryStorage } from 'multer';
 import { ScanService, AppSearchService } from './services';
-import { StartScanDto, ScanLevel, AnalysisType, BatchScanDto } from './dto';
+import { StartScanDto, AnalysisType, BatchScanDto } from './dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 
 @ApiTags('scan')
@@ -84,7 +84,7 @@ export class ScanController {
   @ApiConsumes('multipart/form-data')
   @ApiOperation({
     summary: 'Start APK scan',
-    description: 'Start a security scan with SMART (fast, installed apps) or DEEP (comprehensive, with cloud analysis) mode. Accepts APK file upload, URL, or package name.'
+    description: 'Start a security scan (LightGBM malware model + trackers + SAAT). Accepts APK file upload, URL, or package name.'
   })
   @ApiBody({
     schema: {
@@ -93,12 +93,6 @@ export class ScanController {
         apkFile: { type: 'string', format: 'binary', description: 'APK file to scan' },
         packageName: { type: 'string', description: 'Package name for installed app scan' },
         apkUrl: { type: 'string', description: 'URL to download APK from' },
-        level: {
-          type: 'string',
-          enum: ['SMART', 'DEEP'],
-          default: 'SMART',
-          description: 'SMART: Fast scan for installed apps (ML + trackers + SAAT). DEEP: Comprehensive scan with cloud processing (N8N orchestration).'
-        },
         analysisType: {
           type: 'string',
           enum: ['installed_app', 'apk_upload'],
@@ -140,10 +134,6 @@ export class ScanController {
       throw new BadRequestException(
         'Provide one of: apkFile (multipart), packageName (or apps[0].packageName), or apkUrl',
       );
-    }
-
-    if (body.level && Object.values(ScanLevel).includes(body.level)) {
-      dto.level = body.level;
     }
 
     // Derive analysis type when not provided explicitly
@@ -195,7 +185,6 @@ export class ScanController {
       example: {
         scanId: 'a1b2c3d4e5f6g7h8',
         packageName: 'com.example.app',
-        level: 'SMART',
         analysisType: 'installed_app',
         status: 'COMPLETED',
         securityScore: 75,
@@ -203,7 +192,6 @@ export class ScanController {
         globalRisk: 'MEDIUM',
         overallScore: 72.2,
         confidenceScore: 85.5,
-        recommendDeepAnalysis: false,
         ml: { malwareProbability: 0.15, verdict: 'benign' },
         trackers: { count: 3, categories: {} },
         recommendations: []

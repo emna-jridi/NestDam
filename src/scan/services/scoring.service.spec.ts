@@ -19,72 +19,29 @@ describe('ScoringService', () => {
   describe('calculateConfidenceScore', () => {
     it('should return low confidence when malware probability is near 0.5 (50%)', () => {
       // At 50% (indecision), confidence should be low
-      const confidence = service.calculateConfidenceScore(0.5, 'SMART');
+      const confidence = service.calculateConfidenceScore(0.5);
       expect(confidence).toBeLessThan(50);
     });
 
     it('should return high confidence when malware probability is clear benign (close to 0)', () => {
       // Clear benign (very low probability)
-      const confidence = service.calculateConfidenceScore(0.05, 'SMART');
+      const confidence = service.calculateConfidenceScore(0.05);
       expect(confidence).toBeGreaterThan(70);
     });
 
     it('should return high confidence when malware probability is clear malicious (close to 1)', () => {
       // Clear malicious (very high probability)
-      const confidence = service.calculateConfidenceScore(0.95, 'SMART');
+      const confidence = service.calculateConfidenceScore(0.95);
       expect(confidence).toBeGreaterThan(70);
-    });
-
-    it('should give DEEP scans slightly higher confidence than SMART', () => {
-      const smartConfidence = service.calculateConfidenceScore(0.3, 'SMART');
-      const deepConfidence = service.calculateConfidenceScore(0.3, 'DEEP');
-      expect(deepConfidence).toBeGreaterThan(smartConfidence);
     });
 
     it('should return confidence between 0 and 100', () => {
       const testCases = [0, 0.25, 0.5, 0.75, 1.0];
       testCases.forEach((probability) => {
-        const confidence = service.calculateConfidenceScore(probability, 'SMART');
+        const confidence = service.calculateConfidenceScore(probability);
         expect(confidence).toBeGreaterThanOrEqual(0);
         expect(confidence).toBeLessThanOrEqual(100);
       });
-    });
-  });
-
-  describe('recommendDeepAnalysis', () => {
-    it('should not recommend DEEP if already in DEEP mode', () => {
-      const recommend = service.recommendDeepAnalysis('DEEP', 0.5, 'HIGH');
-      expect(recommend).toBe(false);
-    });
-
-    it('should recommend DEEP if malware probability >= 0.35 in SMART mode', () => {
-      const recommend = service.recommendDeepAnalysis('SMART', 0.35, 'LOW');
-      expect(recommend).toBe(true);
-    });
-
-    it('should recommend DEEP if global risk is CRITICAL in SMART mode', () => {
-      const recommend = service.recommendDeepAnalysis('SMART', 0.1, 'CRITICAL');
-      expect(recommend).toBe(true);
-    });
-
-    it('should recommend DEEP if global risk is HIGH in SMART mode', () => {
-      const recommend = service.recommendDeepAnalysis('SMART', 0.1, 'HIGH');
-      expect(recommend).toBe(true);
-    });
-
-    it('should not recommend DEEP if all signals are benign in SMART mode', () => {
-      const recommend = service.recommendDeepAnalysis('SMART', 0.1, 'LOW');
-      expect(recommend).toBe(false);
-    });
-
-    it('should recommend DEEP for borderline malware probability (0.35)', () => {
-      const recommend = service.recommendDeepAnalysis('SMART', 0.35, 'LOW');
-      expect(recommend).toBe(true);
-    });
-
-    it('should not recommend DEEP for safe malware probability (0.34)', () => {
-      const recommend = service.recommendDeepAnalysis('SMART', 0.34, 'LOW');
-      expect(recommend).toBe(false);
     });
   });
 

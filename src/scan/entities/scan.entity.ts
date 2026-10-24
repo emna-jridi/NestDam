@@ -18,9 +18,6 @@ export class Scan extends Document {
   @Prop()
   versionName: string;
 
-  @Prop({ enum: ['SMART', 'DEEP'], default: 'SMART' })
-  level: string;
-
   @Prop({ enum: ['installed_app', 'apk_upload'], default: 'installed_app' })
   analysisType: string;
 
@@ -45,9 +42,6 @@ export class Scan extends Document {
   @Prop({ type: Number, default: 100 })
   confidenceScore: number;
 
-  @Prop({ type: Boolean, default: false })
-  recommendDeepAnalysis: boolean;
-
   @Prop({ type: Object })
   ml: Record<string, any>;
 
@@ -56,9 +50,6 @@ export class Scan extends Document {
 
   @Prop({ type: Object })
   saat: Record<string, any>;
-
-  @Prop({ type: Object })
-  cloudAnalysis: Record<string, any>;
 
   @Prop({ default: () => new Date() })
   startTime: Date;
@@ -125,4 +116,4 @@ export class Scan extends Document {
 }
 
 export const ScanSchema = SchemaFactory.createForClass(Scan);
-ScanSchema.index({ packageName: 1, versionCode: 1, level: 1 });
+ScanSchema.index({ packageName: 1, versionCode: 1 });

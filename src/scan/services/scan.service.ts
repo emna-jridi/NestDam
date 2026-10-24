@@ -7,7 +7,6 @@ import {
   ScanResultDto,
   ScanProgressDto,
   MLResultDto,
-  ScanLevel,
   AnalysisType,
   BatchScanDto,
   BatchScanResultDto,
@@ -67,23 +66,20 @@ export class ScanService {
   ): Promise<{ scanId: string; status: string }> {
     const scanId = nanoid(16);
     const packageName = dto.packageName || 'unknown';
-    const level = dto.level || ScanLevel.SMART;
     const analysisType = this.resolveAnalysisType(dto);
 
-    dto.level = level;
     dto.analysisType = analysisType;
 
     try {
-      this.logger.log(`Starting ${level} scan ${scanId} (${analysisType})`);
+      this.logger.log(`Starting scan ${scanId} (${analysisType})`);
 
       // Create progress tracker
-      await this.progressTracker.initProgress(scanId, level, packageName);
+      await this.progressTracker.initProgress(scanId, packageName);
 
       // Create database record
       const scan = await this.scanModel.create({
         scanId,
         packageName,
-        level,
         analysisType,
         platform: dto.platform || 'android',
         status: 'QUEUED',
@@ -113,7 +109,6 @@ export class ScanService {
     userId: string,
   ): Promise<void> {
     const startTime = Date.now();
-    const level = dto.level || ScanLevel.SMART;
     const analysisType = dto.analysisType || this.resolveAnalysisType(dto);
     const packageNameFallback = dto.packageName || 'unknown';
     let apkPath: string = '';
@@ -157,15 +152,13 @@ export class ScanService {
         );
         const globalRisk = this.scorer.determineGlobalRisk(securityScore, privacyScore);
         const overallScore = this.scorer.calculateOverallScore(securityScore, privacyScore);
-        const confidenceScore = this.scorer.calculateConfidenceScore(malwareProbability, dto.level);
-        const recommendDeepAnalysis = this.scorer.recommendDeepAnalysis(dto.level, malwareProbability, globalRisk);
+        const confidenceScore = this.scorer.calculateConfidenceScore(malwareProbability);
 
         await this.scanModel.updateOne(
           { scanId },
           {
             packageName: dto.packageName || 'unknown',
             appName: dto.packageName || 'unknown',
-            level,
             analysisType,
             status: 'COMPLETED',
             trackers: trackerResult,
@@ -176,7 +169,6 @@ export class ScanService {
             globalRisk,
             overallScore,
             confidenceScore,
-            recommendDeepAnalysis,
             progressPercentage: 100,
             currentStep: 'finalizing',
             estimatedTimeRemaining: 0,
@@ -263,15 +255,7 @@ export class ScanService {
       const globalRisk = this.scorer.determineGlobalRisk(securityScore, privacyScore);
       const overallScore = this.scorer.calculateOverallScore(securityScore, privacyScore);
 
-      const confidenceScore = this.scorer.calculateConfidenceScore(
-        mlResult.malwareProbability,
-        dto.level,
-      );
-      const recommendDeepAnalysis = this.scorer.recommendDeepAnalysis(
-        dto.level,
-        mlResult.malwareProbability,
-        globalRisk,
-      );
+      const confidenceScore = this.scorer.calculateConfidenceScore(mlResult.malwareProbability);
 
       const recommendations = this.recommender.generateRecommendations({
         ml: mlResult,
@@ -290,7 +274,6 @@ export class ScanService {
           globalRisk,
           overallScore,
           confidenceScore,
-          recommendDeepAnalysis,
           analysisType,
           ml: mlResult,
           trackers: trackerResult,
@@ -312,7 +295,6 @@ export class ScanService {
         scanId,
         packageName,
         versionCode,
-        dto.level,
         analysisType,
       );
 
@@ -478,7 +460,6 @@ export class ScanService {
 
     // Confidence: average of both sources
     const confidenceScore = Math.round((reputationRisk.confidence + geminiResult.confidence) / 2);
-    const recommendDeepAnalysis = hybridProbability >= 0.35 || geminiResult.riskLevel === 'HIGH' || geminiResult.riskLevel === 'CRITICAL';
     const verdict = geminiResult.verdict;
 
     // Step 6: Build ML analysis object with explanations
@@ -505,7 +486,6 @@ export class ScanService {
       scanId,
       packageName,
       appName: packageName.split('.').pop() || packageName,
-      level: ScanLevel.SMART,
       analysisType: AnalysisType.INSTALLED_APP,
       status: 'COMPLETED',
       userId,
@@ -514,7 +494,6 @@ export class ScanService {
       globalRisk,
       overallScore,
       confidenceScore,
-      recommendDeepAnalysis,
       ml: {
         malwareProbability: hybridProbability,
         verdict,
@@ -533,7 +512,6 @@ export class ScanService {
       scanId,
       packageName,
       appName: packageName.split('.').pop() || packageName,
-      level: 'SMART' as any,
       analysisType: 'installed_app' as any,
       status: 'COMPLETED',
       securityScore,
@@ -541,7 +519,6 @@ export class ScanService {
       globalRisk,
       overallScore,
       confidenceScore,
-      recommendDeepAnalysis,
       ml: {
         malwareProbability: hybridProbability,
         verdict,
@@ -599,7 +576,6 @@ export class ScanService {
       appName: scan.appName,
       versionCode: scan.versionCode,
       versionName: scan.versionName,
-      level: scan.level,
       analysisType: scan.analysisType,
       platform: scan.platform || 'android',
       status: scan.status,
@@ -608,11 +584,9 @@ export class ScanService {
       globalRisk: scan.globalRisk,
       overallScore: scan.overallScore,
       confidenceScore: scan.confidenceScore,
-      recommendDeepAnalysis: scan.recommendDeepAnalysis,
       ml: scan.ml,
       trackers: scan.trackers,
       saat: scan.saat,
-      cloudAnalysis: scan.cloudAnalysis,
       startTime: scan.startTime,
       endTime: scan.endTime,
       duration: scan.duration,
@@ -768,7 +742,6 @@ export class ScanService {
         scanId: `${scanId}-${packageName}`,
         packageName,
         appName: app.name || packageName,
-        level: ScanLevel.SMART,
         analysisType: AnalysisType.INSTALLED_APP,
         platform: dto.platform || 'android',
         status: 'COMPLETED',

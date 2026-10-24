@@ -7,5 +7,5 @@ export * from './scan-result.dto';
 export * from './recommendation.dto';
 export * from './scan-progress.dto';
 export * from './batch-scan.dto';
-export { ScanLevel, AnalysisType } from './start-scan.dto';
+export { AnalysisType } from './start-scan.dto';
 export { Platform } from './batch-scan.dto';

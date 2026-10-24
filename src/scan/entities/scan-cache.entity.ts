@@ -4,16 +4,13 @@ import { Document } from 'mongoose';
 @Schema({ timestamps: true, expireAfterSeconds: 2592000 }) // 30 days
 export class ScanCache extends Document {
   @Prop({ required: true, unique: true, index: true })
-  cacheKey: string; // SHA256(packageName + versionCode + level + analysisType)
+  cacheKey: string; // SHA256(packageName + versionCode + analysisType)
 
   @Prop({ required: true, index: true })
   packageName: string;
 
   @Prop({ required: true })
   versionCode: string;
-
-  @Prop({ required: true, enum: ['SMART', 'DEEP'] })
-  level: string;
 
   @Prop({ required: true, enum: ['installed_app', 'apk_upload'] })
   analysisType: string;
@@ -36,4 +33,4 @@ export class ScanCache extends Document {
 
 export const ScanCacheSchema = SchemaFactory.createForClass(ScanCache);
 ScanCacheSchema.index({ cacheKey: 1 });
-ScanCacheSchema.index({ packageName: 1, versionCode: 1, level: 1 });
+ScanCacheSchema.index({ packageName: 1, versionCode: 1 });

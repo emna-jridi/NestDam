@@ -41,15 +41,14 @@ export class ScanUtils {
   }
 
   /**
-   * Calculate cache key from packageName, versionCode, and level
+   * Calculate cache key from packageName, versionCode, and analysisType
    */
   static calculateCacheKey(
     packageName: string,
     versionCode: string,
-    level: string,
     analysisType: string,
   ): string {
-    const combined = `${packageName}:${versionCode}:${level}:${analysisType}`;
+    const combined = `${packageName}:${versionCode}:${analysisType}`;
     return crypto.createHash('sha256').update(combined).digest('hex');
   }
 

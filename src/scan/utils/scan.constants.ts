@@ -58,7 +58,6 @@ export const SCAN_PROGRESS_STEPS = [
   'ml_inference',
   'tracker_detection',
   'saat_analysis',
-  'cloud_processing',
   'finalizing',
 ];
 
@@ -69,8 +68,7 @@ export const STEP_WEIGHTS = {
   ml_inference: 0.15,
   tracker_detection: 0.15,
   saat_analysis: 0.2,
-  cloud_processing: 0.1,
-  finalizing: 0.05,
+  finalizing: 0.15,
 };
 
 export const FEATURE_NORMALIZATION_RANGES = {

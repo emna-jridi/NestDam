@@ -26,7 +26,6 @@ export class ScanResultDto {
   versionCode: string;
   versionName: string;
 
-  level: 'SMART' | 'DEEP';
   analysisType: 'installed_app' | 'apk_upload';
   platform: 'android' | 'ios';
   status: 'COMPLETED' | 'FAILED' | 'IN_PROGRESS' | 'QUEUED';
@@ -38,13 +37,11 @@ export class ScanResultDto {
   overallScore: number; // 0-100
 
   confidenceScore: number; // 0-100
-  recommendDeepAnalysis: boolean;
 
   // Results
   ml?: MLResultDto;
   trackers?: TrackerResultDto;
   saat?: SAATResultDto;
-  cloudAnalysis?: Record<string, any>;
 
   // ML Hybrid Analysis (Gemini + TensorFlow)
   mlAnalysis?: MLAnalysisDto;

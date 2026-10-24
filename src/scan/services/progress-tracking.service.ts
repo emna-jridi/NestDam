@@ -17,21 +17,13 @@ export class ProgressTrackingService {
   /**
    * Initialize progress tracking
    */
-  async initProgress(scanId: string, level: string, packageName: string): Promise<void> {
+  async initProgress(scanId: string, packageName: string): Promise<void> {
     try {
-      const steps = SCAN_PROGRESS_STEPS
-        .filter((step) => {
-          // Filter steps based on scan level
-          if (level === 'SMART' && step === 'cloud_processing') {
-            return false;
-          }
-          return true;
-        })
-        .map((name) => ({
-          name,
-          status: 'PENDING',
-          progress: 0,
-        }));
+      const steps = SCAN_PROGRESS_STEPS.map((name) => ({
+        name,
+        status: 'PENDING',
+        progress: 0,
+      }));
 
       await this.progressModel.create({
         scanId,

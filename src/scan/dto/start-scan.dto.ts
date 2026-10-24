@@ -1,10 +1,5 @@
 import { IsString, IsOptional, IsEnum, ValidateIf } from 'class-validator';
 
-export enum ScanLevel {
-  SMART = 'SMART',
-  DEEP = 'DEEP',
-}
-
 export enum AnalysisType {
   INSTALLED_APP = 'installed_app',
   APK_UPLOAD = 'apk_upload',
@@ -24,10 +19,6 @@ export class StartScanDto {
   @IsString()
   @ValidateIf((obj) => !obj.packageName && !obj.apkFile)
   apkUrl?: string;
-
-  @IsEnum(ScanLevel)
-  @IsOptional()
-  level: ScanLevel = ScanLevel.SMART;
 
   /**
    * Derived on the backend when not provided:

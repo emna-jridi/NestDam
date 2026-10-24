@@ -40,48 +40,24 @@ describe('CacheService', () => {
 
   describe('Cache Key Generation with analysisType', () => {
     it('should generate different keys for different analysis types', async () => {
-      // Simulate different cache keys for SMART vs DEEP
-      const smartKey = 'com.example.app:100:SMART:installed_app';
-      const deepKey = 'com.example.app:100:DEEP:installed_app';
-      const apkKey = 'com.example.app:100:SMART:apk_upload';
+      const installedKey = 'com.example.app:100:installed_app';
+      const apkKey = 'com.example.app:100:apk_upload';
 
-      // Keys should be different
-      expect(smartKey).not.toBe(deepKey);
-      expect(smartKey).not.toBe(apkKey);
-      expect(deepKey).not.toBe(apkKey);
+      expect(installedKey).not.toBe(apkKey);
     });
 
     it('should generate consistent keys for same inputs', () => {
       // Testing key consistency
-      const inputs1 = 'com.example.app:100:SMART:installed_app';
-      const inputs2 = 'com.example.app:100:SMART:installed_app';
+      const inputs1 = 'com.example.app:100:installed_app';
+      const inputs2 = 'com.example.app:100:installed_app';
       expect(inputs1).toBe(inputs2);
-    });
-
-    it('should differentiate SMART and DEEP in cache lookup', async () => {
-      const smartCached = { scanResult: { scanId: '1' } };
-      mockCacheModel.findOne.mockReturnValue({ lean: jest.fn().mockResolvedValueOnce(smartCached) });
-      
-      // SMART cache hit
-      const smartResult = await service.getFromCache('com.example', '100', 'SMART', 'installed_app');
-      expect(mockCacheModel.findOne).toHaveBeenCalled();
-      expect(smartResult).toEqual(smartCached.scanResult);
-
-      // Reset mock
-      mockCacheModel.findOne.mockClear();
-      mockCacheModel.findOne.mockReturnValue({ lean: jest.fn().mockResolvedValueOnce(null) });
-
-      // DEEP cache miss (different key)
-      const deepResult = await service.getFromCache('com.example', '100', 'DEEP', 'installed_app');
-      expect(mockCacheModel.findOne).toHaveBeenCalled();
-      expect(deepResult).toBeNull();
     });
 
     it('should differentiate installed_app and apk_upload in cache', async () => {
       mockCacheModel.findOne.mockReturnValue({ lean: jest.fn().mockResolvedValueOnce({ scanResult: { scanId: '1' } }) });
       
       // installed_app cache
-      const installedResult = await service.getFromCache('com.example', '100', 'SMART', 'installed_app');
+      const installedResult = await service.getFromCache('com.example', '100', 'installed_app');
       expect(mockCacheModel.findOne).toHaveBeenCalledTimes(1);
       expect(installedResult).not.toBeNull();
 
@@ -90,7 +66,7 @@ describe('CacheService', () => {
       mockCacheModel.findOne.mockReturnValue({ lean: jest.fn().mockResolvedValueOnce(null) });
 
       // apk_upload should get different cache
-      const apkResult = await service.getFromCache('com.example', '100', 'SMART', 'apk_upload');
+      const apkResult = await service.getFromCache('com.example', '100', 'apk_upload');
       expect(mockCacheModel.findOne).toHaveBeenCalledTimes(1);
       expect(apkResult).toBeNull();
     });
@@ -101,7 +77,7 @@ describe('CacheService', () => {
       const cachedData = { scanResult: { scanId: 'scan123', score: 75 }, isStale: false };
       mockCacheModel.findOne.mockReturnValue({ lean: jest.fn().mockResolvedValueOnce(cachedData) });
 
-      const result = await service.getFromCache('com.example', '100', 'SMART', 'installed_app');
+      const result = await service.getFromCache('com.example', '100', 'installed_app');
       expect(result).toEqual(cachedData.scanResult);
     });
 
@@ -109,14 +85,14 @@ describe('CacheService', () => {
       const staleData = { scanResult: { scanId: 'scan123' }, isStale: true };
       mockCacheModel.findOne.mockReturnValue({ lean: jest.fn().mockResolvedValueOnce(staleData) });
 
-      const result = await service.getFromCache('com.example', '100', 'SMART', 'installed_app');
+      const result = await service.getFromCache('com.example', '100', 'installed_app');
       expect(result).toBeNull();
     });
 
     it('should return null if cache not found', async () => {
       mockCacheModel.findOne.mockReturnValue({ lean: jest.fn().mockResolvedValueOnce(null) });
 
-      const result = await service.getFromCache('com.example', '100', 'SMART', 'installed_app');
+      const result = await service.getFromCache('com.example', '100', 'installed_app');
       expect(result).toBeNull();
     });
 
@@ -125,7 +101,7 @@ describe('CacheService', () => {
         throw new Error('DB error');
       });
 
-      const result = await service.getFromCache('com.example', '100', 'SMART', 'installed_app');
+      const result = await service.getFromCache('com.example', '100', 'installed_app');
       expect(result).toBeNull();
     });
 
@@ -133,43 +109,31 @@ describe('CacheService', () => {
       const leanMock = jest.fn().mockResolvedValue({ scanResult: { scanId: 'scan123' } });
       mockCacheModel.findOne.mockReturnValue({ lean: leanMock });
 
-      await service.getFromCache('com.example', '100', 'SMART', 'installed_app');
+      await service.getFromCache('com.example', '100', 'installed_app');
       expect(leanMock).toHaveBeenCalled();
     });
   });
 
   describe('cacheResult', () => {
-    it('should cache result with correct TTL for SMART', async () => {
+    it('should cache result with key, analysisType and expiry', async () => {
       mockCacheModel.updateOne.mockResolvedValue({ modifiedCount: 1 });
 
-      await service.cacheResult('scan123', 'com.example', '100', 'SMART', 'installed_app');
+      await service.cacheResult('scan123', 'com.example', '100', 'installed_app');
 
       const callArgs = mockCacheModel.updateOne.mock.calls[0];
       // First argument is filter
       expect(callArgs[0]).toHaveProperty('cacheKey');
       // Second argument is data (with Mongoose upsert semantics)
-      expect(callArgs[1]).toHaveProperty('level', 'SMART');
       expect(callArgs[1]).toHaveProperty('analysisType', 'installed_app');
       expect(callArgs[1]).toHaveProperty('expiresAt');
       // Third argument is options
       expect(callArgs[2]).toHaveProperty('upsert', true);
     });
 
-    it('should cache result with correct TTL for DEEP', async () => {
-      mockCacheModel.updateOne.mockResolvedValue({ modifiedCount: 1 });
-
-      await service.cacheResult('scan123', 'com.example', '100', 'DEEP', 'installed_app');
-
-      const callArgs = mockCacheModel.updateOne.mock.calls[0];
-      expect(callArgs[1]).toHaveProperty('level', 'DEEP');
-      // DEEP should use 1-day TTL (shorter cache)
-      expect(callArgs[1]).toHaveProperty('expiresAt');
-    });
-
     it('should include analysisType in cache entry', async () => {
       mockCacheModel.updateOne.mockResolvedValue({ modifiedCount: 1 });
 
-      await service.cacheResult('scan123', 'com.example', '100', 'SMART', 'apk_upload');
+      await service.cacheResult('scan123', 'com.example', '100', 'apk_upload');
 
       const callArgs = mockCacheModel.updateOne.mock.calls[0];
       expect(callArgs[1]).toHaveProperty('analysisType', 'apk_upload');
@@ -178,7 +142,7 @@ describe('CacheService', () => {
     it('should include packageName and versionCode', async () => {
       mockCacheModel.updateOne.mockResolvedValue({ modifiedCount: 1 });
 
-      await service.cacheResult('scan123', 'com.example.app', '200', 'SMART', 'installed_app');
+      await service.cacheResult('scan123', 'com.example.app', '200', 'installed_app');
 
       const callArgs = mockCacheModel.updateOne.mock.calls[0];
       expect(callArgs[1]).toHaveProperty('packageName', 'com.example.app');
@@ -188,7 +152,7 @@ describe('CacheService', () => {
     it('should include scanId in scanResult', async () => {
       mockCacheModel.updateOne.mockResolvedValue({ modifiedCount: 1 });
 
-      await service.cacheResult('scan456', 'com.example', '100', 'SMART', 'installed_app');
+      await service.cacheResult('scan456', 'com.example', '100', 'installed_app');
 
       const callArgs = mockCacheModel.updateOne.mock.calls[0];
       expect(callArgs[1]).toHaveProperty('scanResult');
@@ -198,7 +162,7 @@ describe('CacheService', () => {
     it('should set isStale to false on cache', async () => {
       mockCacheModel.updateOne.mockResolvedValue({ modifiedCount: 1 });
 
-      await service.cacheResult('scan123', 'com.example', '100', 'SMART', 'installed_app');
+      await service.cacheResult('scan123', 'com.example', '100', 'installed_app');
 
       const callArgs = mockCacheModel.updateOne.mock.calls[0];
       expect(callArgs[1]).toHaveProperty('isStale', false);
@@ -207,7 +171,7 @@ describe('CacheService', () => {
     it('should use upsert semantics', async () => {
       mockCacheModel.updateOne.mockResolvedValue({ modifiedCount: 1, upsertedId: 'new_id' });
 
-      await service.cacheResult('scan123', 'com.example', '100', 'SMART', 'installed_app');
+      await service.cacheResult('scan123', 'com.example', '100', 'installed_app');
 
       const callArgs = mockCacheModel.updateOne.mock.calls[0];
       expect(callArgs[2]).toEqual({ upsert: true });
@@ -290,11 +254,11 @@ describe('CacheService', () => {
   });
 
   describe('TTL Configuration', () => {
-    it('should use 3-day TTL for SMART scans', async () => {
+    it('should use a 3-day TTL', async () => {
       mockCacheModel.updateOne.mockResolvedValue({ modifiedCount: 1 });
 
       const now = Date.now();
-      await service.cacheResult('scan123', 'com.example', '100', 'SMART', 'installed_app');
+      await service.cacheResult('scan123', 'com.example', '100', 'installed_app');
 
       const callArgs = mockCacheModel.updateOne.mock.calls[0];
       const expiresAt = callArgs[1].expiresAt;
@@ -304,22 +268,6 @@ describe('CacheService', () => {
       // Allow small variance due to execution time
       expect(ttlDays).toBeGreaterThan(2.99);
       expect(ttlDays).toBeLessThan(3.01);
-    });
-
-    it('should use 1-day TTL for DEEP scans', async () => {
-      mockCacheModel.updateOne.mockResolvedValue({ modifiedCount: 1 });
-
-      const now = Date.now();
-      await service.cacheResult('scan123', 'com.example', '100', 'DEEP', 'installed_app');
-
-      const callArgs = mockCacheModel.updateOne.mock.calls[0];
-      const expiresAt = callArgs[1].expiresAt;
-      const ttlMs = expiresAt.getTime() - now;
-      const ttlDays = ttlMs / (1000 * 60 * 60 * 24);
-
-      // Allow small variance due to execution time
-      expect(ttlDays).toBeGreaterThan(0.99);
-      expect(ttlDays).toBeLessThan(1.01);
     });
   });
 });
