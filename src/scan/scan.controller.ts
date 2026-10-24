@@ -17,7 +17,6 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiConsumes, ApiBody, ApiOperation, ApiResponse, ApiProperty, ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { memoryStorage } from 'multer';
 import { ScanService, AppSearchService } from './services';
-import { FastMLScanService } from './services/fast-ml-scan.service';
 import { StartScanDto, ScanLevel, AnalysisType, BatchScanDto } from './dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 
@@ -26,7 +25,6 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 export class ScanController {
   constructor(
     private scanService: ScanService,
-    private fastMLScanService: FastMLScanService,
     private appSearchService: AppSearchService,
   ) { }
 
@@ -294,62 +292,5 @@ export class ScanController {
   @ApiOperation({ summary: 'Get ML model configuration and feature info' })
   async getModelInfo(): Promise<any> {
     return this.scanService.getMLModelInfo();
-  }
-
-  /**
-   * FAST ML Scan - Quick manifest-based malware detection
-   * Accepts APK file upload
-   * Returns score, verdict (benign/malicious), threshold, and recommendation
-   */
-  @Post('fast')
-  @HttpCode(HttpStatus.OK)
-  @UseInterceptors(
-    FileInterceptor('apkFile', {
-      storage: memoryStorage(),
-      limits: { fileSize: 200 * 1024 * 1024 }, // 200MB
-      fileFilter: (req, file, cb) => {
-        const allowedMimes = ['application/vnd.android.package-archive', 'application/octet-stream'];
-        if (allowedMimes.includes(file.mimetype) || file.originalname.endsWith('.apk')) {
-          cb(null, true);
-        } else {
-          cb(new BadRequestException('Only .apk files are allowed'), false);
-        }
-      },
-    }),
-  )
-  @ApiConsumes('multipart/form-data')
-  @ApiOperation({
-    summary: 'FAST ML Scan',
-    description: 'Quick manifest-based malware detection using Drebin LightGBM model',
-  })
-  @ApiResponse({
-    status: 200,
-    description: 'Scan result with score, verdict, and recommendation',
-    schema: {
-      example: {
-        score: 0.29612722281895215,
-        verdict: 'benign',
-        threshold: 0.5526797385620915,
-        recommendation: null,
-      },
-    },
-  })
-  @ApiResponse({ status: 400, description: 'Invalid APK file' })
-  @ApiResponse({ status: 500, description: 'Scan failed' })
-  @ApiBearerAuth()
-  @UseGuards(JwtAuthGuard)
-  async fastScan(
-    @UploadedFile() file: Express.Multer.File,
-  ): Promise<{
-    score: number;
-    verdict: 'benign' | 'malicious';
-    threshold: number;
-    recommendation: 'SMART' | 'DEEP' | null;
-  }> {
-    if (!file) {
-      throw new BadRequestException('APK file required');
-    }
-
-    return this.fastMLScanService.scanApkBuffer(file.buffer, file.originalname);
   }
 }

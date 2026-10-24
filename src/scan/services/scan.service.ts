@@ -6,7 +6,7 @@ import {
   StartScanDto,
   ScanResultDto,
   ScanProgressDto,
-  FeatureExtractionDto,
+  MLResultDto,
   ScanLevel,
   AnalysisType,
   BatchScanDto,
@@ -20,12 +20,11 @@ import {
   ScanProgress,
 } from '../entities';
 import {
-  ScanUtils,
-  STEP_WEIGHTS,
   SCAN_PROGRESS_STEPS,
+  DANGEROUS_PERMISSIONS,
 } from '../utils';
 import { APKFileHandlerService } from './apk-file-handler.service';
-import { FeatureExtractionService } from './feature-extraction.service';
+import { FastMLScanService, FastScanResult } from './fast-ml-scan.service';
 import { MLMalwareDetectorService } from './ml-malware-detector.service';
 import { TrackerDetectionService } from './tracker-detection.service';
 import { SAATAnalysisService } from './saat-analysis.service';
@@ -33,9 +32,11 @@ import { ScoringService } from './scoring.service';
 import { RecommendationsService } from './recommendations.service';
 import { CacheService } from './cache.service';
 import { ProgressTrackingService } from './progress-tracking.service';
-import { N8NOrchestrationService } from './n8n-orchestration.service';
-import { GeminiMLService, GeminiAnalysisResult, AppAnalysisInput } from './gemini-ml.service';
+import { GeminiMLService, AppAnalysisInput } from './gemini-ml.service';
 import { MLAnalysisDto } from '../dto/scan-result.dto';
+
+const CRITICAL_SCORE = 0.9; // LightGBM score above which the risk is CRITICAL
+const EXCESSIVE_PERMISSIONS = 35;
 
 @Injectable()
 export class ScanService {
@@ -46,7 +47,7 @@ export class ScanService {
     @InjectModel(ScanCache.name) private cacheModel: Model<ScanCache>,
     @InjectModel(ScanProgress.name) private progressModel: Model<ScanProgress>,
     private apkHandler: APKFileHandlerService,
-    private featureExtractor: FeatureExtractionService,
+    private mlScanner: FastMLScanService,
     private mlDetector: MLMalwareDetectorService,
     private geminiML: GeminiMLService,
     private trackerDetector: TrackerDetectionService,
@@ -55,7 +56,6 @@ export class ScanService {
     private recommender: RecommendationsService,
     private cacheService: CacheService,
     private progressTracker: ProgressTrackingService,
-    private n8nOrchestrator: N8NOrchestrationService,
   ) { }
 
   /**
@@ -122,7 +122,6 @@ export class ScanService {
     let appName: string;
     let versionCode: string;
     let versionName: string;
-    let manifest: string;
     let signatureValid: boolean;
     let certificateFingerprint: string;
 
@@ -201,7 +200,7 @@ export class ScanService {
         throw new Error('No APK source provided');
       }
 
-      ({ apkPath, tempDir, packageName, appName, versionCode, versionName, manifest, signatureValid, certificateFingerprint } = apkInfo);
+      ({ apkPath, tempDir, packageName, appName, versionCode, versionName, signatureValid, certificateFingerprint } = apkInfo);
 
       await this.scanModel.updateOne(
         { scanId },
@@ -223,58 +222,26 @@ export class ScanService {
       // Manifest already parsed in handleFileUpload
       await this.progressTracker.completeStep(scanId, 'parsing_manifest');
 
-      // Step 3: Extract features
+      // Step 3-4: Extract features + LightGBM inference (one Python call, same extractor as training)
       await this.progressTracker.updateStep(scanId, 'extracting_features', 'IN_PROGRESS');
-      const features = await this.featureExtractor.extractFeatures(
-        apkPath,
-        manifest,
-        appName,
-        packageName,
-      );
+      const inferenceStart = Date.now();
+      const lgbm = await this.mlScanner.scanApk(apkPath);
       await this.progressTracker.completeStep(scanId, 'extracting_features');
-
-      // Update scan with features debug info
-      await this.scanModel.updateOne(
-        { scanId },
-        { 'debugInfo.extractionErrors': features.extractionErrors },
-      );
-
-      // Step 4: ML Inference
-      await this.progressTracker.updateStep(scanId, 'ml_inference', 'IN_PROGRESS');
-      const mlResult = await this.mlDetector.inferMalware(features);
       await this.progressTracker.completeStep(scanId, 'ml_inference');
+      const mlResult = this.toMlResult(lgbm, Date.now() - inferenceStart);
+      const permissions = lgbm.permissions;
 
-      // Step 5: Tracker Detection (SMART + DEEP)
-      let trackerResult: any = null;
-      if (['SMART', 'DEEP'].includes(dto.level)) {
-        await this.progressTracker.updateStep(scanId, 'tracker_detection', 'IN_PROGRESS');
-        trackerResult = await this.trackerDetector.detectTrackers(packageName);
-        await this.progressTracker.completeStep(scanId, 'tracker_detection');
-      }
+      // Step 5: Tracker Detection
+      await this.progressTracker.updateStep(scanId, 'tracker_detection', 'IN_PROGRESS');
+      const trackerResult = await this.trackerDetector.detectTrackers(packageName);
+      await this.progressTracker.completeStep(scanId, 'tracker_detection');
 
-      // Step 6: SAAT Analysis (SMART + DEEP)
-      let saatResult: any = null;
-      if (['SMART', 'DEEP'].includes(dto.level)) {
-        await this.progressTracker.updateStep(scanId, 'saat_analysis', 'IN_PROGRESS');
-        saatResult = await this.saatAnalyzer.analyzeSAAt(apkPath);
-        await this.progressTracker.completeStep(scanId, 'saat_analysis');
-      }
+      // Step 6: SAAT Analysis
+      await this.progressTracker.updateStep(scanId, 'saat_analysis', 'IN_PROGRESS');
+      const saatResult = await this.saatAnalyzer.analyzeSAAt(apkPath);
+      await this.progressTracker.completeStep(scanId, 'saat_analysis');
 
-      // Step 7: Cloud Processing (DEEP only)
-      let cloudResult: any = null;
-      if (dto.level === 'DEEP') {
-        await this.progressTracker.updateStep(scanId, 'cloud_processing', 'IN_PROGRESS');
-        cloudResult = await this.n8nOrchestrator.submitDeepScan({
-          scanId,
-          packageName,
-          apkUrl: dto.apkUrl,
-          features,
-          mlScore: mlResult.malwareProbability,
-        });
-        await this.progressTracker.completeStep(scanId, 'cloud_processing');
-      }
-
-      // Step 8: Scoring and Recommendations
+      // Step 7: Scoring and Recommendations
       await this.progressTracker.updateStep(scanId, 'finalizing', 'IN_PROGRESS');
 
       const securityScore = this.scorer.calculateSecurityScore(
@@ -283,13 +250,14 @@ export class ScanService {
         signatureValid,
       );
 
+      const dangerousCount = permissions.filter((p) => DANGEROUS_PERMISSIONS.includes(p)).length;
       const privacyScore = this.scorer.calculatePrivacyScore(
         trackerResult?.categories.advertising || 0,
         trackerResult?.categories.analytics || 0,
         trackerResult?.categories.crossapp || 0,
         trackerResult?.categories.location || 0,
-        (features.permissions_count ?? 0) > 0.7,
-        (features.dangerous_permissions_count ?? 0) * 20,
+        permissions.length > EXCESSIVE_PERMISSIONS,
+        dangerousCount,
       );
 
       const globalRisk = this.scorer.determineGlobalRisk(securityScore, privacyScore);
@@ -309,6 +277,7 @@ export class ScanService {
         ml: mlResult,
         trackers: trackerResult,
         saat: saatResult,
+        permissions,
       });
 
       // Update final scan record
@@ -326,7 +295,7 @@ export class ScanService {
           ml: mlResult,
           trackers: trackerResult,
           saat: saatResult,
-          cloudAnalysis: cloudResult,
+          permissions,
           recommendations,
           scanErrors: [],
           endTime: new Date(),
@@ -662,6 +631,27 @@ export class ScanService {
       fromCache: scan.fromCache,
       cacheExpiresAt: scan.cacheExpiresAt,
       _debug: scan.debugInfo,
+    };
+  }
+
+  /**
+   * LightGBM output -> stored ML result (risk bands are relative to the model's own threshold)
+   */
+  private toMlResult(lgbm: FastScanResult, inferenceTime: number): MLResultDto {
+    const { score, threshold } = lgbm;
+    let riskLevel: MLResultDto['riskLevel'] = 'LOW';
+    if (score >= CRITICAL_SCORE) riskLevel = 'CRITICAL';
+    else if (score >= threshold) riskLevel = 'HIGH';
+    else if (score >= threshold / 2) riskLevel = 'MEDIUM';
+
+    return {
+      malwareProbability: Math.round(score * 1000) / 1000,
+      // 0 at the threshold, 1 at the far end of the scale
+      confidenceLevel: Math.round((Math.abs(score - threshold) / (score >= threshold ? 1 - threshold : threshold)) * 1000) / 1000,
+      topContributingFeatures: lgbm.topContributingFeatures.map((f) => ({ ...f, normalizedValue: f.value })),
+      riskLevel,
+      modelVersion: lgbm.modelVersion,
+      inferenceTime,
     };
   }
 

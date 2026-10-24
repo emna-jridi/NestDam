@@ -1,5 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { RecommendationDto } from '../dto';
+import { DANGEROUS_PERMISSIONS } from '../utils';
+
+const MANY_DANGEROUS_PERMISSIONS = 5;
 
 @Injectable()
 export class RecommendationsService {
@@ -80,47 +83,49 @@ export class RecommendationsService {
       }
     }
 
-    // Permission-based recommendations
-    if (scanResult.ml && scanResult.ml.topContributingFeatures) {
-      for (const feature of scanResult.ml.topContributingFeatures) {
-        if (feature.name === 'has_camera' && feature.value === 1) {
-          recommendations.push({
-            severity: 'MEDIUM',
-            category: 'PERMISSION',
-            title: 'Camera Permission',
-            description: 'This app requests camera access. Ensure this is necessary for its functionality.',
-            action: 'Review camera permission usage in settings',
-            impact: 'MEDIUM',
-            sortPriority: 60,
-            relatedFindings: ['Camera permission requested'],
-          });
-        }
+    // Permission-based recommendations (full names like android.permission.CAMERA, or short names)
+    if (scanResult.permissions?.length) {
+      const shortName = (p: string) => p.slice(p.lastIndexOf('.') + 1);
+      const perms = new Set<string>(scanResult.permissions.map(shortName));
+      const dangerousCount = DANGEROUS_PERMISSIONS.filter((p) => perms.has(shortName(p))).length;
 
-        if (feature.name === 'has_sms' && feature.value === 1) {
-          recommendations.push({
-            severity: 'HIGH',
-            category: 'PERMISSION',
-            title: 'SMS Access Permission',
-            description: 'This app can read and send SMS messages. This is a high-risk permission.',
-            action: 'Revoke SMS permissions if not essential',
-            impact: 'HIGH',
-            sortPriority: 85,
-            relatedFindings: ['SMS permission requested'],
-          });
-        }
+      if (perms.has('CAMERA')) {
+        recommendations.push({
+          severity: 'MEDIUM',
+          category: 'PERMISSION',
+          title: 'Camera Permission',
+          description: 'This app requests camera access. Ensure this is necessary for its functionality.',
+          action: 'Review camera permission usage in settings',
+          impact: 'MEDIUM',
+          sortPriority: 60,
+          relatedFindings: ['Camera permission requested'],
+        });
+      }
 
-        if (feature.name === 'dangerous_permissions_count' && feature.value > 0.5) {
-          recommendations.push({
-            severity: 'HIGH',
-            category: 'PERMISSION',
-            title: 'Multiple Dangerous Permissions',
-            description: `This app requests ${Math.round(feature.value * 20)} dangerous permissions that access sensitive data.`,
-            action: 'Review each permission and disable unnecessary ones',
-            impact: 'HIGH',
-            sortPriority: 75,
-            relatedFindings: ['Multiple dangerous permissions'],
-          });
-        }
+      if (['READ_SMS', 'SEND_SMS', 'RECEIVE_SMS'].some((p) => perms.has(p))) {
+        recommendations.push({
+          severity: 'HIGH',
+          category: 'PERMISSION',
+          title: 'SMS Access Permission',
+          description: 'This app can read and send SMS messages. This is a high-risk permission.',
+          action: 'Revoke SMS permissions if not essential',
+          impact: 'HIGH',
+          sortPriority: 85,
+          relatedFindings: ['SMS permission requested'],
+        });
+      }
+
+      if (dangerousCount > MANY_DANGEROUS_PERMISSIONS) {
+        recommendations.push({
+          severity: 'HIGH',
+          category: 'PERMISSION',
+          title: 'Multiple Dangerous Permissions',
+          description: `This app requests ${dangerousCount} dangerous permissions that access sensitive data.`,
+          action: 'Review each permission and disable unnecessary ones',
+          impact: 'HIGH',
+          sortPriority: 75,
+          relatedFindings: ['Multiple dangerous permissions'],
+        });
       }
     }
 

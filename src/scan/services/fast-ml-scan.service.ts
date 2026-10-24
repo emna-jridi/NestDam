@@ -11,7 +11,9 @@ export interface FastScanResult {
   score: number;
   verdict: 'benign' | 'malicious';
   threshold: number;
-  recommendation: 'SMART' | 'DEEP' | null;
+  modelVersion: string;
+  permissions: string[];
+  topContributingFeatures: { name: string; impact: number; value: number }[];
 }
 
 @Injectable()
@@ -66,37 +68,6 @@ export class FastMLScanService {
       throw new InternalServerErrorException(
         `Failed to scan APK: ${error.message}`,
       );
-    }
-  }
-
-  async scanApkBuffer(buffer: Buffer, filename: string): Promise<FastScanResult> {
-    // Create temporary file from buffer
-    const tempDir = path.join(process.cwd(), 'temp-scans');
-    if (!fs.existsSync(tempDir)) {
-      fs.mkdirSync(tempDir, { recursive: true });
-    }
-
-    const tempPath = path.join(tempDir, `${Date.now()}_${filename}`);
-
-    try {
-      // Write buffer to temp file
-      fs.writeFileSync(tempPath, buffer);
-      this.logger.debug(`Created temp APK: ${tempPath}`);
-
-      // Scan
-      const result = await this.scanApk(tempPath);
-
-      return result;
-    } finally {
-      // Clean up temp file
-      try {
-        if (fs.existsSync(tempPath)) {
-          fs.unlinkSync(tempPath);
-          this.logger.debug(`Cleaned up temp file: ${tempPath}`);
-        }
-      } catch (e) {
-        this.logger.warn(`Failed to clean up temp file: ${e.message}`);
-      }
     }
   }
 
