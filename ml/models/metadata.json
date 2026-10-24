@@ -1,77 +1,64 @@
 {
   "version": "lgbm-2.0",
-  "created": "2026-10-24T07:39:33",
+  "created": "2026-10-24T07:43:48",
   "model": "LightGBM",
-  "threshold": 0.62,
-  "trees": 226,
-  "train_size": 6248,
-  "test_size": 1562,
+  "threshold": 0.61,
+  "trees": 562,
+  "train_size": 4672,
+  "test_size": 1169,
   "metrics": {
-    "auc": 0.9925,
-    "f1": 0.9671,
-    "precision": 0.989,
-    "recall": 0.9462,
-    "false_positive_rate": 0.01,
+    "auc": 0.9973,
+    "f1": 0.9597,
+    "precision": 0.9829,
+    "recall": 0.9375,
+    "false_positive_rate": 0.0075,
     "confusion": {
-      "tn": 792,
-      "fp": 8,
-      "fn": 41,
-      "tp": 721
+      "tn": 795,
+      "fp": 6,
+      "fn": 23,
+      "tp": 345
     }
   },
   "metrics_per_dataset": {
     "androzoo": {
-      "auc": 0.9922,
-      "f1": 0.982,
-      "precision": 0.9948,
-      "recall": 0.9695,
-      "false_positive_rate": 0.005,
+      "auc": null,
+      "f1": null,
+      "precision": null,
+      "recall": null,
+      "false_positive_rate": 0.0075,
       "confusion": {
-        "tn": 398,
-        "fp": 2,
-        "fn": 12,
-        "tp": 382
+        "tn": 397,
+        "fp": 3,
+        "fn": 0,
+        "tp": 0
       }
     },
     "open": {
-      "auc": 0.9926,
-      "f1": 0.9509,
-      "precision": 0.9826,
-      "recall": 0.9212,
-      "false_positive_rate": 0.015,
+      "auc": 0.9972,
+      "f1": 0.9637,
+      "precision": 0.9914,
+      "recall": 0.9375,
+      "false_positive_rate": 0.0075,
       "confusion": {
-        "tn": 394,
-        "fp": 6,
-        "fn": 29,
-        "tp": 339
+        "tn": 398,
+        "fp": 3,
+        "fn": 23,
+        "tp": 345
       }
     }
   },
   "cross_source": {
-    "androzoo->open": {
-      "auc": 0.7945,
-      "f1": 0.5679,
-      "precision": 0.7947,
-      "recall": 0.4418,
-      "false_positive_rate": 0.1049,
-      "confusion": {
-        "tn": 1791,
-        "fp": 210,
-        "fn": 1027,
-        "tp": 813
-      }
-    },
     "open->androzoo": {
-      "auc": 0.5222,
-      "f1": 0.668,
-      "precision": 0.5105,
-      "recall": 0.966,
+      "auc": null,
+      "f1": null,
+      "precision": null,
+      "recall": null,
       "false_positive_rate": 0.912,
       "confusion": {
         "tn": 176,
         "fp": 1824,
-        "fn": 67,
-        "tp": 1902
+        "fn": 0,
+        "tp": 0
       }
     }
   }

@@ -32,6 +32,8 @@ MIN_DF = 20  # a token must appear in at least this many training apps
 # Age proxies: AndroZoo malware is 2018-2020 while benign is recent, so these teach "old app = malware"
 AGE_TOKEN_PREFIXES = ("api::Landroid/support/",)
 AGE_NUMERIC = {"min_sdk", "target_sdk"}
+# AndroZoo malware is 2018-2020 vs recent benign everywhere: drop it until recent samples are downloaded
+EXCLUDED = {("androzoo", "malware")}
 SEED = 42
 
 PARAMS = {
@@ -58,7 +60,8 @@ def load_rows() -> list[dict]:
             for line in f:
                 row = json.loads(line)
                 row["dataset"] = name
-                rows.append(row)
+                if (name, row["label"]) not in EXCLUDED:
+                    rows.append(row)
     return rows
 
 
@@ -115,20 +118,21 @@ def evaluate(booster: lgb.Booster, rows: list[dict], tokens, numeric, threshold:
     p = booster.predict(to_matrix(rows, tokens, numeric))
     pred = p >= threshold
     tn, fp, fn, tp = confusion_matrix(y, pred, labels=[0, 1]).ravel()
+    both = len(set(y)) == 2  # a benign-only test set has no AUC / F1 / recall
     return {
-        "auc": round(float(roc_auc_score(y, p)), 4),
-        "f1": round(float(f1_score(y, pred)), 4),
-        "precision": round(float(precision_score(y, pred)), 4),
-        "recall": round(float(recall_score(y, pred)), 4),
-        "false_positive_rate": round(float(fp / (fp + tn)), 4),
+        "auc": round(float(roc_auc_score(y, p)), 4) if both else None,
+        "f1": round(float(f1_score(y, pred)), 4) if both else None,
+        "precision": round(float(precision_score(y, pred)), 4) if both else None,
+        "recall": round(float(recall_score(y, pred)), 4) if both else None,
+        "false_positive_rate": round(float(fp / (fp + tn)), 4) if fp + tn else None,
         "confusion": {"tn": int(tn), "fp": int(fp), "fn": int(fn), "tp": int(tp)},
     }
 
 
 def show(title: str, m: dict) -> None:
     c = m["confusion"]
-    print(f"  {title:<28} AUC {m['auc']:.4f} | F1 {m['f1']:.4f} | FPR {m['false_positive_rate']:.2%} "
-          f"| fp {c['fp']} fn {c['fn']}")
+    scores = f"AUC {m['auc']:.4f} | F1 {m['f1']:.4f} | " if m["auc"] is not None else ""
+    print(f"  {title:<28} {scores}FPR {m['false_positive_rate']:.2%} | fp {c['fp']} fn {c['fn']}")
 
 
 def main() -> None:
@@ -159,9 +163,10 @@ def main() -> None:
     cross = {}
     for train_name in DATASETS:
         for test_name in DATASETS:
-            if train_name == test_name:
+            train_part = [r for r in rows if r["dataset"] == train_name]
+            if train_name == test_name or len({r["label"] for r in train_part}) < 2:
                 continue
-            b, t, n, th = fit([r for r in rows if r["dataset"] == train_name])
+            b, t, n, th = fit(train_part)
             cross[f"{train_name}->{test_name}"] = m = evaluate(b, [r for r in rows if r["dataset"] == test_name], t, n, th)
             show(f"train {train_name} -> test {test_name}", m)
 
