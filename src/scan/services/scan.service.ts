@@ -121,8 +121,9 @@ export class ScanService {
     let certificateFingerprint: string;
 
     try {
-      // Installed-app flow: no APK file provided, use package name + trackers only
-      if (analysisType === AnalysisType.INSTALLED_APP) {
+      // No APK (package name only): trackers + heuristics. With an APK (picked file or the
+      // installed app's own APK uploaded by the phone) the full LightGBM flow below runs.
+      if (!dto.apkFile && !dto.apkUrl) {
         // Fast-forward initial steps not needed for installed-app scans
         await this.progressTracker.completeStep(scanId, 'extracting_apk');
         await this.progressTracker.completeStep(scanId, 'parsing_manifest');

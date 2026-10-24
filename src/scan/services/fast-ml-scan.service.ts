@@ -45,7 +45,7 @@ export class FastMLScanService {
         this.pythonScriptPath,
         apkPath,
       ], {
-        timeout: 60000, // 60 second timeout (full dex parsing)
+        timeout: 180000, // 3 min: full dex parsing of big installed apps (Play apps can be 100+ MB)
         maxBuffer: 10 * 1024 * 1024, // 10MB buffer
       });
 
